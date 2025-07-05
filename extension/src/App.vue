@@ -7,11 +7,16 @@
           <i class="fas fa-network-wired me-2"></i>
           PCL Extension
         </router-link>
-        
-        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+
+        <button
+          class="navbar-toggler"
+          type="button"
+          data-bs-toggle="collapse"
+          data-bs-target="#navbarNav"
+        >
           <span class="navbar-toggler-icon"></span>
         </button>
-        
+
         <div class="collapse navbar-collapse" id="navbarNav">
           <ul class="navbar-nav me-auto">
             <li class="nav-item">
@@ -51,7 +56,7 @@
               </router-link>
             </li>
           </ul>
-          
+
           <!-- Node Status -->
           <div class="navbar-text me-3">
             <span class="badge bg-success me-2" v-if="nodeStatus.connected">
@@ -60,19 +65,35 @@
             <span class="badge bg-danger me-2" v-else>
               <i class="fas fa-circle"></i> Disconnected
             </span>
-            Node: {{ nodeStatus.nodeId || 'Unknown' }}
+            Node: {{ nodeStatus.nodeId || "Unknown" }}
           </div>
-          
+
           <!-- Settings Dropdown -->
           <div class="dropdown">
-            <button class="btn btn-outline-light dropdown-toggle" type="button" data-bs-toggle="dropdown">
+            <button
+              class="btn btn-outline-light dropdown-toggle"
+              type="button"
+              data-bs-toggle="dropdown"
+            >
               <i class="fas fa-cog"></i>
             </button>
             <ul class="dropdown-menu dropdown-menu-end">
-              <li><router-link class="dropdown-item" to="/settings">Settings</router-link></li>
-              <li><hr class="dropdown-divider"></li>
-              <li><a class="dropdown-item" href="#" @click="exportData">Export Data</a></li>
-              <li><a class="dropdown-item" href="#" @click="clearCache">Clear Cache</a></li>
+              <li>
+                <router-link class="dropdown-item" to="/settings"
+                  >Settings</router-link
+                >
+              </li>
+              <li><hr class="dropdown-divider" /></li>
+              <li>
+                <a class="dropdown-item" href="#" @click="exportData"
+                  >Export Data</a
+                >
+              </li>
+              <li>
+                <a class="dropdown-item" href="#" @click="clearCache"
+                  >Clear Cache</a
+                >
+              </li>
             </ul>
           </div>
         </div>
@@ -88,9 +109,9 @@
     <footer class="bg-light text-center py-3 mt-5">
       <div class="container">
         <span class="text-muted">
-          PCL Extension v{{ version }} | 
+          PCL Extension v{{ version }} |
           <span v-if="systemStats.activeTransactions !== null">
-            Active Transactions: {{ systemStats.activeTransactions }} | 
+            Active Transactions: {{ systemStats.activeTransactions }} |
           </span>
           <span v-if="systemStats.connectedPeers !== null">
             Connected Peers: {{ systemStats.connectedPeers }}
@@ -108,12 +129,21 @@
 
     <!-- Toast Container -->
     <div class="toast-container position-fixed bottom-0 end-0 p-3">
-      <div v-for="toast in toasts" :key="toast.id" class="toast show" role="alert">
+      <div
+        v-for="toast in toasts"
+        :key="toast.id"
+        class="toast show"
+        role="alert"
+      >
         <div class="toast-header">
           <i :class="getToastIcon(toast.type)" class="me-2"></i>
           <strong class="me-auto">{{ toast.title }}</strong>
           <small>{{ toast.time }}</small>
-          <button type="button" class="btn-close" @click="removeToast(toast.id)"></button>
+          <button
+            type="button"
+            class="btn-close"
+            @click="removeToast(toast.id)"
+          ></button>
         </div>
         <div class="toast-body">
           {{ toast.message }}
@@ -124,69 +154,73 @@
 </template>
 
 <script>
-import { mapState, mapActions } from 'vuex'
+import { mapState, mapActions } from "vuex";
 
 export default {
-  name: 'App',
+  name: "App",
   data() {
     return {
-      version: '0.1.0'
-    }
+      version: "0.1.0",
+    };
   },
   computed: {
-    ...mapState(['nodeStatus', 'systemStats', 'loading', 'toasts'])
+    ...mapState(["nodeStatus", "systemStats", "loading", "toasts"]),
   },
   methods: {
-    ...mapActions(['fetchNodeStatus', 'fetchSystemStats', 'showToast', 'removeToast']),
-    
+    ...mapActions([
+      "fetchNodeStatus",
+      "fetchSystemStats",
+      "showToast",
+      "removeToast",
+    ]),
+
     getToastIcon(type) {
       const icons = {
-        success: 'fas fa-check-circle text-success',
-        error: 'fas fa-exclamation-circle text-danger',
-        warning: 'fas fa-exclamation-triangle text-warning',
-        info: 'fas fa-info-circle text-info'
-      }
-      return icons[type] || icons.info
+        success: "fas fa-check-circle text-success",
+        error: "fas fa-exclamation-circle text-danger",
+        warning: "fas fa-exclamation-triangle text-warning",
+        info: "fas fa-info-circle text-info",
+      };
+      return icons[type] || icons.info;
     },
-    
+
     exportData() {
       this.showToast({
-        type: 'info',
-        title: 'Export Data',
-        message: 'Data export functionality will be implemented.'
-      })
+        type: "info",
+        title: "Export Data",
+        message: "Data export functionality will be implemented.",
+      });
     },
-    
+
     clearCache() {
-      localStorage.clear()
+      localStorage.clear();
       this.showToast({
-        type: 'success',
-        title: 'Cache Cleared',
-        message: 'Local cache has been cleared successfully.'
-      })
-    }
+        type: "success",
+        title: "Cache Cleared",
+        message: "Local cache has been cleared successfully.",
+      });
+    },
   },
   async mounted() {
     // Initialize app data
     try {
-      await this.fetchNodeStatus()
-      await this.fetchSystemStats()
-      
+      await this.fetchNodeStatus();
+      await this.fetchSystemStats();
+
       // Set up periodic updates
       setInterval(() => {
-        this.fetchNodeStatus()
-        this.fetchSystemStats()
-      }, 5000) // Update every 5 seconds
-      
+        this.fetchNodeStatus();
+        this.fetchSystemStats();
+      }, 5000); // Update every 5 seconds
     } catch (error) {
       this.showToast({
-        type: 'error',
-        title: 'Connection Error',
-        message: 'Failed to connect to PCL backend.'
-      })
+        type: "error",
+        title: "Connection Error",
+        message: "Failed to connect to PCL backend.",
+      });
     }
-  }
-}
+  },
+};
 </script>
 
 <style scoped>
@@ -229,4 +263,4 @@ main {
 .toast {
   min-width: 300px;
 }
-</style> 
+</style>

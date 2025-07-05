@@ -14,8 +14,8 @@
 
 <script>
 export default {
-  name: 'NotFound'
-}
+  name: "NotFound",
+};
 </script>
 
 <style scoped>
@@ -25,4 +25,4 @@ export default {
   align-items: center;
   justify-content: center;
 }
-</style> 
+</style>

@@ -7,7 +7,9 @@
           <i class="fas fa-tachometer-alt me-2"></i>
           Dashboard
         </h1>
-        <p class="text-muted">Real-time overview of the Peer Consensus Layer system</p>
+        <p class="text-muted">
+          Real-time overview of the Peer Consensus Layer system
+        </p>
       </div>
       <div class="col-auto">
         <button class="btn btn-primary" @click="refreshData">
@@ -26,7 +28,7 @@
               <div class="flex-grow-1">
                 <h6 class="card-subtitle mb-1">Node Status</h6>
                 <h3 class="card-title mb-0">
-                  {{ nodeStatus.connected ? 'Connected' : 'Disconnected' }}
+                  {{ nodeStatus.connected ? "Connected" : "Disconnected" }}
                 </h3>
               </div>
               <div class="icon">
@@ -59,7 +61,9 @@
             <div class="d-flex align-items-center">
               <div class="flex-grow-1">
                 <h6 class="card-subtitle mb-1">Connected Peers</h6>
-                <h3 class="card-title mb-0">{{ systemStats.connectedPeers || 0 }}</h3>
+                <h3 class="card-title mb-0">
+                  {{ systemStats.connectedPeers || 0 }}
+                </h3>
               </div>
               <div class="icon">
                 <i class="fas fa-users fa-2x opacity-75"></i>
@@ -132,7 +136,7 @@
               <div class="col-sm-6">
                 <strong>Phase:</strong>
                 <span class="badge bg-success ms-2">
-                  {{ consensusData.phase || 'Normal Operation' }}
+                  {{ consensusData.phase || "Normal Operation" }}
                 </span>
               </div>
               <div class="col-sm-6">
@@ -140,12 +144,21 @@
                 <span class="ms-2">{{ consensusData.electionRound || 0 }}</span>
               </div>
             </div>
-            
-            <hr>
-            
+
+            <hr />
+
             <h6>Current Leaders:</h6>
-            <div v-if="consensusData.currentLeaders && consensusData.currentLeaders.length">
-              <div v-for="leader in consensusData.currentLeaders" :key="leader" class="badge bg-primary me-1 mb-1">
+            <div
+              v-if="
+                consensusData.currentLeaders &&
+                consensusData.currentLeaders.length
+              "
+            >
+              <div
+                v-for="leader in consensusData.currentLeaders"
+                :key="leader"
+                class="badge bg-primary me-1 mb-1"
+              >
                 {{ leader }}
               </div>
             </div>
@@ -168,8 +181,8 @@
             <div class="mb-3">
               <label class="form-label">Network Health</label>
               <div class="progress">
-                <div 
-                  class="progress-bar" 
+                <div
+                  class="progress-bar"
                   :class="getHealthClass(networkHealth)"
                   :style="{ width: networkHealth + '%' }"
                 >
@@ -177,19 +190,19 @@
                 </div>
               </div>
             </div>
-            
+
             <div class="mb-3">
               <label class="form-label">System Load</label>
               <div class="progress">
-                <div 
-                  class="progress-bar bg-info" 
+                <div
+                  class="progress-bar bg-info"
                   :style="{ width: (systemStats.systemLoad || 0) + '%' }"
                 >
-                  {{ (systemStats.systemLoad || 0) }}%
+                  {{ systemStats.systemLoad || 0 }}%
                 </div>
               </div>
             </div>
-            
+
             <div class="row text-center">
               <div class="col">
                 <small class="text-muted">Uptime</small>
@@ -209,26 +222,36 @@
     <div class="row">
       <div class="col-lg-6 mb-3">
         <div class="card">
-          <div class="card-header d-flex justify-content-between align-items-center">
+          <div
+            class="card-header d-flex justify-content-between align-items-center"
+          >
             <h5 class="card-title mb-0">
               <i class="fas fa-history me-2"></i>
               Recent Transactions
             </h5>
-            <router-link to="/transactions" class="btn btn-sm btn-outline-primary">
+            <router-link
+              to="/transactions"
+              class="btn btn-sm btn-outline-primary"
+            >
               View All
             </router-link>
           </div>
           <div class="card-body p-0">
-            <div v-if="recentTransactions.length" class="list-group list-group-flush">
-              <div 
-                v-for="tx in recentTransactions" 
-                :key="tx.id" 
+            <div
+              v-if="recentTransactions.length"
+              class="list-group list-group-flush"
+            >
+              <div
+                v-for="tx in recentTransactions"
+                :key="tx.id"
                 class="list-group-item d-flex justify-content-between align-items-center"
               >
                 <div>
                   <strong>{{ tx.id.substring(0, 8) }}...</strong>
-                  <br>
-                  <small class="text-muted">{{ formatTime(tx.timestamp) }}</small>
+                  <br />
+                  <small class="text-muted">{{
+                    formatTime(tx.timestamp)
+                  }}</small>
                 </div>
                 <span class="badge" :class="getStatusClass(tx.status)">
                   {{ tx.status }}
@@ -244,30 +267,37 @@
 
       <div class="col-lg-6 mb-3">
         <div class="card">
-          <div class="card-header d-flex justify-content-between align-items-center">
+          <div
+            class="card-header d-flex justify-content-between align-items-center"
+          >
             <h5 class="card-title mb-0">
               <i class="fas fa-bell me-2"></i>
               System Events
             </h5>
-            <button class="btn btn-sm btn-outline-secondary" @click="clearEvents">
+            <button
+              class="btn btn-sm btn-outline-secondary"
+              @click="clearEvents"
+            >
               Clear
             </button>
           </div>
           <div class="card-body p-0">
             <div v-if="systemEvents.length" class="list-group list-group-flush">
-              <div 
-                v-for="event in systemEvents" 
-                :key="event.id" 
+              <div
+                v-for="event in systemEvents"
+                :key="event.id"
                 class="list-group-item"
               >
                 <div class="d-flex align-items-center">
                   <i :class="getEventIcon(event.type)" class="me-2"></i>
                   <div class="flex-grow-1">
                     <strong>{{ event.title }}</strong>
-                    <br>
+                    <br />
                     <small class="text-muted">{{ event.message }}</small>
                   </div>
-                  <small class="text-muted">{{ formatTime(event.timestamp) }}</small>
+                  <small class="text-muted">{{
+                    formatTime(event.timestamp)
+                  }}</small>
                 </div>
               </div>
             </div>
@@ -282,118 +312,131 @@
 </template>
 
 <script>
-import { mapState, mapGetters, mapActions } from 'vuex'
-import Chart from 'chart.js/auto'
-import moment from 'moment'
+import { mapState, mapGetters, mapActions } from "vuex";
+import Chart from "chart.js/auto";
+import moment from "moment";
 
 export default {
-  name: 'Dashboard',
+  name: "DashboardView",
   data() {
     return {
       charts: {},
       systemEvents: [
         {
           id: 1,
-          type: 'info',
-          title: 'Node Connected',
-          message: 'Successfully connected to peer network',
-          timestamp: new Date()
+          type: "info",
+          title: "Node Connected",
+          message: "Successfully connected to peer network",
+          timestamp: new Date(),
         },
         {
           id: 2,
-          type: 'success',
-          title: 'Leader Election',
-          message: 'New leaders elected for round 42',
-          timestamp: new Date(Date.now() - 300000)
-        }
-      ]
-    }
+          type: "success",
+          title: "Leader Election",
+          message: "New leaders elected for round 42",
+          timestamp: new Date(Date.now() - 300000),
+        },
+      ],
+    };
   },
   computed: {
-    ...mapState(['nodeStatus', 'systemStats', 'loading', 'transactions', 'consensusData']),
-    ...mapGetters([
-      'activeTransactionCount', 
-      'totalMempoolSize', 
-      'networkHealth'
+    ...mapState([
+      "nodeStatus",
+      "systemStats",
+      "loading",
+      "transactions",
+      "consensusData",
     ]),
-    
+    ...mapGetters([
+      "activeTransactionCount",
+      "totalMempoolSize",
+      "networkHealth",
+    ]),
+
     recentTransactions() {
       return this.transactions
         .slice(0, 5)
-        .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
-    }
+        .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    },
   },
   methods: {
     ...mapActions([
-      'fetchNodeStatus', 
-      'fetchSystemStats', 
-      'fetchTransactions', 
-      'fetchConsensusData'
+      "fetchNodeStatus",
+      "fetchSystemStats",
+      "fetchTransactions",
+      "fetchConsensusData",
     ]),
-    
+
     async refreshData() {
       await Promise.all([
         this.fetchNodeStatus(),
         this.fetchSystemStats(),
         this.fetchTransactions(),
-        this.fetchConsensusData()
-      ])
-      this.updateCharts()
+        this.fetchConsensusData(),
+      ]);
+      this.updateCharts();
     },
-    
+
     initCharts() {
-      this.initThroughputChart()
-      this.initNodeChart()
+      this.initThroughputChart();
+      this.initNodeChart();
     },
-    
+
     initThroughputChart() {
-      const ctx = this.$refs.throughputChart.getContext('2d')
+      const ctx = this.$refs.throughputChart.getContext("2d");
       this.charts.throughput = new Chart(ctx, {
-        type: 'line',
+        type: "line",
         data: {
-          labels: Array.from({ length: 10 }, (_, i) => moment().subtract(i * 5, 'minutes').format('HH:mm')).reverse(),
-          datasets: [{
-            label: 'Transactions/min',
-            data: Array.from({ length: 10 }, () => Math.floor(Math.random() * 20) + 5),
-            borderColor: 'rgb(75, 192, 192)',
-            backgroundColor: 'rgba(75, 192, 192, 0.1)',
-            tension: 0.4
-          }]
+          labels: Array.from({ length: 10 }, (_, i) =>
+            moment()
+              .subtract(i * 5, "minutes")
+              .format("HH:mm"),
+          ).reverse(),
+          datasets: [
+            {
+              label: "Transactions/min",
+              data: Array.from(
+                { length: 10 },
+                () => Math.floor(Math.random() * 20) + 5,
+              ),
+              borderColor: "rgb(75, 192, 192)",
+              backgroundColor: "rgba(75, 192, 192, 0.1)",
+              tension: 0.4,
+            },
+          ],
         },
         options: {
           responsive: true,
           maintainAspectRatio: false,
           scales: {
             y: {
-              beginAtZero: true
-            }
-          }
-        }
-      })
+              beginAtZero: true,
+            },
+          },
+        },
+      });
     },
-    
+
     initNodeChart() {
-      const ctx = this.$refs.nodeChart.getContext('2d')
+      const ctx = this.$refs.nodeChart.getContext("2d");
       this.charts.nodes = new Chart(ctx, {
-        type: 'doughnut',
+        type: "doughnut",
         data: {
-          labels: ['Leaders', 'Validators', 'Extensions'],
-          datasets: [{
-            data: [3, 2, 8],
-            backgroundColor: [
-              '#FF6384',
-              '#36A2EB',
-              '#FFCE56'
-            ]
-          }]
+          labels: ["Leaders", "Validators", "Extensions"],
+          datasets: [
+            {
+              data: [3, 2, 8],
+              backgroundColor: ["#FF6384", "#36A2EB", "#FFCE56"],
+            },
+          ],
         },
         options: {
           responsive: true,
-          maintainAspectRatio: false
-        }
-      })
+          maintainAspectRatio: false,
+        },
+      });
     },
-    
+
     updateCharts() {
       // Update with real data when available
       if (this.charts.throughput) {
@@ -403,75 +446,75 @@ export default {
         // Update node distribution with real data
       }
     },
-    
+
     getHealthClass(health) {
-      if (health >= 80) return 'bg-success'
-      if (health >= 60) return 'bg-warning'
-      return 'bg-danger'
+      if (health >= 80) return "bg-success";
+      if (health >= 60) return "bg-warning";
+      return "bg-danger";
     },
-    
+
     getStatusClass(status) {
       const classes = {
-        'completed': 'bg-success',
-        'processing': 'bg-warning',
-        'validating': 'bg-info',
-        'failed': 'bg-danger',
-        'pending': 'bg-secondary'
-      }
-      return classes[status] || 'bg-secondary'
+        completed: "bg-success",
+        processing: "bg-warning",
+        validating: "bg-info",
+        failed: "bg-danger",
+        pending: "bg-secondary",
+      };
+      return classes[status] || "bg-secondary";
     },
-    
+
     getEventIcon(type) {
       const icons = {
-        'success': 'fas fa-check-circle text-success',
-        'error': 'fas fa-exclamation-circle text-danger',
-        'warning': 'fas fa-exclamation-triangle text-warning',
-        'info': 'fas fa-info-circle text-info'
-      }
-      return icons[type] || icons.info
+        success: "fas fa-check-circle text-success",
+        error: "fas fa-exclamation-circle text-danger",
+        warning: "fas fa-exclamation-triangle text-warning",
+        info: "fas fa-info-circle text-info",
+      };
+      return icons[type] || icons.info;
     },
-    
+
     formatTime(timestamp) {
-      return moment(timestamp).fromNow()
+      return moment(timestamp).fromNow();
     },
-    
+
     formatUptime(seconds) {
-      if (!seconds) return '0h 0m'
-      const hours = Math.floor(seconds / 3600)
-      const minutes = Math.floor((seconds % 3600) / 60)
-      return `${hours}h ${minutes}m`
+      if (!seconds) return "0h 0m";
+      const hours = Math.floor(seconds / 3600);
+      const minutes = Math.floor((seconds % 3600) / 60);
+      return `${hours}h ${minutes}m`;
     },
-    
+
     formatResponseTime(ms) {
-      return ms ? ms.toFixed(0) : '0'
+      return ms ? ms.toFixed(0) : "0";
     },
-    
+
     clearEvents() {
-      this.systemEvents = []
-    }
+      this.systemEvents = [];
+    },
   },
-  
+
   async mounted() {
-    await this.refreshData()
-    this.initCharts()
-    
+    await this.refreshData();
+    this.initCharts();
+
     // Set up auto-refresh
     this.refreshInterval = setInterval(() => {
-      this.refreshData()
-    }, 30000) // Refresh every 30 seconds
+      this.refreshData();
+    }, 30000); // Refresh every 30 seconds
   },
-  
+
   beforeUnmount() {
     if (this.refreshInterval) {
-      clearInterval(this.refreshInterval)
+      clearInterval(this.refreshInterval);
     }
-    
+
     // Destroy charts
-    Object.values(this.charts).forEach(chart => {
-      if (chart) chart.destroy()
-    })
-  }
-}
+    Object.values(this.charts).forEach((chart) => {
+      if (chart) chart.destroy();
+    });
+  },
+};
 </script>
 
 <style scoped>
@@ -515,4 +558,4 @@ export default {
 canvas {
   max-height: 300px;
 }
-</style> 
+</style>
