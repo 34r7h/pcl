@@ -48,4 +48,10 @@ pub enum PclError {
     Libp2p(String),
 }
 
+impl From<libp2p::swarm::ConnectionDenied> for PclError {
+    fn from(error: libp2p::swarm::ConnectionDenied) -> Self {
+        PclError::Network(error.to_string())
+    }
+}
+
 pub type Result<T> = std::result::Result<T, PclError>; 

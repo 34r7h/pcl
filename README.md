@@ -99,3 +99,202 @@ Real user interaction example. Hopefully some visuals for the cube constructions
 ## Simulator
 Puts a tx load on the system to simulate real use.
 
+## Installation & Usage
+
+### Prerequisites
+- Rust 1.70+ (with Cargo)
+- Node.js 18+ (with npm)
+- Chrome or Chromium browser (for extension)
+
+### Backend Node (Rust Library)
+
+The backend provides the core consensus library with all mempool operations, cryptographic functions, and consensus mechanisms.
+
+```bash
+# Navigate to backend directory
+cd backend
+
+# Build the library
+cargo build --release
+
+# Run all tests (204 tests covering the full system)
+cargo test
+
+# Run specific test modules
+cargo test node_identity
+cargo test mempool
+cargo test transaction_workflow
+cargo test leader_election
+cargo test network_communication
+cargo test integration
+
+# Check code with clippy
+cargo clippy
+```
+
+### Simulator (Rust CLI)
+
+The simulator provides load testing, stress testing, and benchmarking capabilities for the consensus system.
+
+```bash
+# Navigate to simulator directory
+cd simulator
+
+# Build the simulator
+cargo build --release
+
+# Run basic load test (50 transactions, 10 nodes)
+cargo run -- load-test
+
+# Run stress test (1000 transactions, 100 nodes)
+cargo run -- stress-test
+
+# Run comprehensive benchmark
+cargo run -- benchmark
+
+# Custom load test with specific parameters
+cargo run -- load-test --transactions 200 --nodes 20 --duration 30
+
+# View help for all available options
+cargo run -- --help
+```
+
+#### Simulator Commands
+
+- `load-test`: Basic load testing with configurable parameters
+- `stress-test`: High-load stress testing to find system limits
+- `benchmark`: Performance benchmarking with detailed metrics
+- `--transactions N`: Number of transactions to simulate
+- `--nodes N`: Number of virtual nodes to spawn
+- `--duration N`: Test duration in seconds
+
+### Extension (Vue.js Dashboard)
+
+The extension provides a real-time dashboard for monitoring the consensus system, viewing transactions, and managing nodes.
+
+```bash
+# Navigate to extension directory
+cd extension
+
+# Install dependencies
+npm install
+
+# Start development server
+npm run serve
+
+# Build for production
+npm run build
+
+# Run linter
+npm run lint
+```
+
+#### Installing as Chrome Extension
+
+1. Build the extension:
+   ```bash
+   cd extension
+   npm run build
+   ```
+
+2. Open Chrome and navigate to `chrome://extensions/`
+
+3. Enable "Developer mode" (toggle in top right)
+
+4. Click "Load unpacked" and select the `extension/dist` directory
+
+5. The PCL Dashboard extension will now appear in your browser toolbar
+
+#### Extension Features
+
+- **Real-time Dashboard**: Monitor system health, transaction throughput, and consensus state
+- **Transaction Monitoring**: View active transactions across all mempools
+- **Node Management**: Monitor node status, uptime, and performance metrics
+- **Mempool Visualization**: Real-time view of all 5 mempools plus uptime tracking
+- **Leader Election Tracking**: Monitor leader election cycles and voting rounds
+- **Performance Metrics**: Charts showing system performance over time
+
+### Development Workflow
+
+1. **Start Backend Development**:
+   ```bash
+   cd backend
+   cargo test --watch  # Run tests in watch mode
+   ```
+
+2. **Start Simulator for Testing**:
+   ```bash
+   cd simulator
+   cargo run -- load-test --transactions 10 --nodes 5
+   ```
+
+3. **Start Extension Development**:
+   ```bash
+   cd extension
+   npm run serve  # Hot-reload development server
+   ```
+
+4. **Run Full System Integration**:
+   ```bash
+   # Terminal 1: Backend tests
+   cd backend && cargo test
+   
+   # Terminal 2: Simulator stress test
+   cd simulator && cargo run -- stress-test
+   
+   # Terminal 3: Extension development
+   cd extension && npm run serve
+   ```
+
+### System Architecture
+
+The system consists of three main components:
+
+1. **Backend Library** (`backend/`): Core consensus logic, cryptography, and mempool management
+2. **Simulator** (`simulator/`): Load testing and performance benchmarking tools
+3. **Extension** (`extension/`): Vue.js dashboard for monitoring and interaction
+
+### Testing
+
+The system includes comprehensive test coverage:
+
+- **204 total tests** across 6 test modules
+- **Unit tests** for individual components
+- **Integration tests** for full system workflows
+- **Load tests** via simulator for performance validation
+- **End-to-end tests** for complete transaction workflows
+
+Run the full test suite:
+```bash
+# Backend tests
+cd backend && cargo test
+
+# Simulator functionality
+cd simulator && cargo run -- benchmark
+
+# Extension tests (if you add them)
+cd extension && npm test
+```
+
+### Performance Monitoring
+
+Use the simulator to monitor system performance:
+
+```bash
+# Monitor transaction throughput
+cargo run -- load-test --transactions 1000 --nodes 50
+
+# Check consensus performance under load
+cargo run -- stress-test
+
+# Generate performance reports
+cargo run -- benchmark > performance_report.txt
+```
+
+The extension dashboard provides real-time monitoring of:
+- Transaction processing rates
+- Mempool sizes and states
+- Node uptime and response times
+- Leader election cycles
+- System health metrics
+

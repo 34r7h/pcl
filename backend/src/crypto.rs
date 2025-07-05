@@ -119,4 +119,17 @@ pub fn calculate_digital_root(tx_id: &[u8]) -> u8 {
     
     log::debug!("Calculated digital root: {} for tx_id sum: {}", digital_root, sum);
     digital_root as u8
+}
+
+// Convenience functions for simulator compatibility
+pub fn generate_keypair() -> NodeKeypair {
+    NodeKeypair::new()
+}
+
+pub fn sign_data(keypair: &NodeKeypair, data: &[u8]) -> Signature {
+    keypair.sign_data(data)
+}
+
+pub fn hash_data(data: &[u8]) -> Vec<u8> {
+    hash_transaction_data(data)
 } 

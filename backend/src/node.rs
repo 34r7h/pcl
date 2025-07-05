@@ -18,6 +18,7 @@ pub enum NodeRole {
 pub struct Node {
     pub id: Uuid,
     pub ip_address: IpAddr,
+    pub ip: String,  // String version for simulator compatibility
     pub public_key: VerifyingKey,
     pub ip_signature: Signature,
     pub role: NodeRole,
@@ -41,6 +42,7 @@ impl Node {
         let node = Node {
             id: Uuid::new_v4(),
             ip_address,
+            ip: ip_address.to_string(),  // String version for compatibility
             public_key: keypair.public_key(),
             ip_signature,
             role: NodeRole::Extension, // Default to Extension
@@ -51,6 +53,16 @@ impl Node {
         };
 
         log::info!("Node created with IP {} and valid signature", ip_address);
+        Ok(node)
+    }
+
+    // New constructor for simulator that takes IP as string
+    pub fn new_with_string_ip(ip: String, keypair: NodeKeypair, role: NodeRole) -> Result<Self> {
+        let ip_address: IpAddr = ip.parse()
+            .map_err(|_| PclError::IpValidation(format!("Invalid IP address format: {}", ip)))?;
+        
+        let mut node = Self::new(ip_address, &keypair)?;
+        node.role = role;
         Ok(node)
     }
 
@@ -196,6 +208,26 @@ impl NodeRegistry {
     pub fn update_disqualifications(&mut self) -> Result<()> {
         for node in self.nodes.values_mut() {
             node.check_disqualification_expiry()?;
+        }
+        Ok(())
+    }
+
+    pub fn add_node(&mut self, node: Node) -> Result<()> {
+        self.register_node(node)
+    }
+
+    pub fn remove_node(&mut self, node_id: Uuid) -> Result<()> {
+        if let Some(node) = self.nodes.remove(&node_id) {
+            self.ip_to_node.remove(&node.ip_address);
+            log::info!("Node {} removed from registry", node_id);
+        }
+        Ok(())
+    }
+
+    pub fn update_node_role(&mut self, node_id: Uuid, new_role: NodeRole) -> Result<()> {
+        if let Some(node) = self.nodes.get_mut(&node_id) {
+            node.role = new_role;
+            log::info!("Node {} role updated to {:?}", node_id, new_role);
         }
         Ok(())
     }
