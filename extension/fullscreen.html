@@ -231,6 +231,63 @@
     .status-dot.connected {
       background: #4CAF50;
     }
+
+    .test-address {
+      background: rgba(255, 255, 255, 0.1);
+      padding: 8px 12px;
+      margin: 4px 0;
+      border-radius: 6px;
+      cursor: pointer;
+      font-family: monospace;
+      font-size: 12px;
+      transition: background 0.2s ease;
+    }
+
+    .test-address:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+
+    .validation-step {
+      display: flex;
+      align-items: center;
+      padding: 8px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .step-number {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: bold;
+      margin-right: 12px;
+    }
+
+    .step-text {
+      flex: 1;
+      font-size: 14px;
+    }
+
+    .step-status {
+      font-size: 16px;
+    }
+
+    .step-number.active {
+      background: #4CAF50;
+    }
+
+    .step-number.completed {
+      background: #2196F3;
+    }
+
+    #faucet-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
   </style>
 </head>
 <body>
@@ -257,6 +314,7 @@
           <h3>Balance</h3>
           <div class="balance" id="fullscreen-balance">0.00 XMBL</div>
           <div id="fullscreen-address" class="address-display">Loading...</div>
+          <button class="btn btn-primary" id="faucet-btn" onclick="requestFaucet()" style="margin-top: 10px;">🚰 Get Test Funds</button>
         </div>
 
         <!-- Network Stats -->
@@ -286,6 +344,60 @@
               <div class="stat-value" id="tx-pending">0</div>
               <div class="stat-label">Pending</div>
             </div>
+          </div>
+        </div>
+
+        <!-- Test Addresses Card -->
+        <div class="card">
+          <h3>Test Addresses</h3>
+          <div style="font-size: 12px; opacity: 0.8; margin-bottom: 10px;">Click to copy for testing</div>
+          <div id="test-addresses">
+            <div class="test-address" onclick="copyTestAddress(this)" data-address="alice123456789012345678">
+              👩 Alice: alice123456789012345678
+            </div>
+            <div class="test-address" onclick="copyTestAddress(this)" data-address="bob987654321098765432">
+              👨 Bob: bob987654321098765432
+            </div>
+            <div class="test-address" onclick="copyTestAddress(this)" data-address="charlie111222333444555">
+              🧑 Charlie: charlie111222333444555
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Validation Workflow -->
+      <div class="card" id="validation-workflow" style="display: none;">
+        <h3>🔍 Transaction Validation Workflow</h3>
+        <div id="validation-steps">
+          <div class="validation-step" id="step-1">
+            <span class="step-number">1</span>
+            <span class="step-text">Alice creates transaction</span>
+            <span class="step-status" id="status-1">⏳</span>
+          </div>
+          <div class="validation-step" id="step-2">
+            <span class="step-number">2</span>
+            <span class="step-text">Charlie processes and gossips</span>
+            <span class="step-status" id="status-2">⏳</span>
+          </div>
+          <div class="validation-step" id="step-3">
+            <span class="step-number">3</span>
+            <span class="step-text">Leaders assign validation tasks</span>
+            <span class="step-status" id="status-3">⏳</span>
+          </div>
+          <div class="validation-step" id="step-4">
+            <span class="step-number">4</span>
+            <span class="step-text">Alice completes validation tasks</span>
+            <span class="step-status" id="status-4">⏳</span>
+          </div>
+          <div class="validation-step" id="step-5">
+            <span class="step-number">5</span>
+            <span class="step-text">Charlie processes validation results</span>
+            <span class="step-status" id="status-5">⏳</span>
+          </div>
+          <div class="validation-step" id="step-6">
+            <span class="step-number">6</span>
+            <span class="step-text">Validator broadcasts and finalizes</span>
+            <span class="step-status" id="status-6">⏳</span>
           </div>
         </div>
       </div>
