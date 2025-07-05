@@ -121,6 +121,12 @@ pub struct ConsensusBehaviour {
     pub invalidation_notice_receiver: mpsc::Receiver<P2PMessage>,
     #[behaviour(ignore)]
     pub invalidation_notice_sender: mpsc::Sender<P2PMessage>,
+
+    // Channel for transactions submitted by clients/simulators
+    #[behaviour(ignore)]
+    pub client_submitted_tx_receiver: mpsc::Receiver<TxData>,
+    #[behaviour(ignore)]
+    pub client_submitted_tx_sender: mpsc::Sender<TxData>,
 }
 
 impl ConsensusBehaviour {
@@ -1173,6 +1179,7 @@ impl NetworkBehaviourEventProcess<GossipsubEvent> for ConsensusBehaviour {
                 // or handle directly if simple enough (like re-gossip).
                 // For now, let's add a channel for it.
                 let invalidation_notice_sender_clone = self.invalidation_notice_sender.clone();
+                 let client_tx_sender_clone = self.client_submitted_tx_sender.clone();
 
 
                         tokio::spawn(async move {
@@ -1197,16 +1204,22 @@ impl NetworkBehaviourEventProcess<GossipsubEvent> for ConsensusBehaviour {
                                         eprintln!("Error sending ForwardUserTaskCompletionToOriginLeader to channel: {}", e);
                                     }
                                 }
-                        P2PMessage::VerifiedProcessingTxBroadcast{ .. } => {
-                             if let Err(e) = verified_proctx_sender_clone.send(p2p_message).await {
-                                eprintln!("Error sending VerifiedProcessingTxBroadcast to channel: {}", e);
-                            }
-                        }
-                        P2PMessage::TransactionInvalidationNotice{ .. } => {
-                            if let Err(e) = invalidation_notice_sender_clone.send(p2p_message).await {
-                                eprintln!("Error sending TransactionInvalidationNotice to channel: {}", e);
-                            }
-                        }
+                                P2PMessage::VerifiedProcessingTxBroadcast{ .. } => {
+                                     if let Err(e) = verified_proctx_sender_clone.send(p2p_message).await {
+                                        eprintln!("Error sending VerifiedProcessingTxBroadcast to channel: {}", e);
+                                    }
+                                }
+                                P2PMessage::TransactionInvalidationNotice{ .. } => {
+                                    if let Err(e) = invalidation_notice_sender_clone.send(p2p_message).await {
+                                        eprintln!("Error sending TransactionInvalidationNotice to channel: {}", e);
+                                    }
+                                }
+                                P2PMessage::ClientSubmitRawTransaction(tx_data) => {
+                                    // This message is TxData, not P2PMessage enum
+                                    if let Err(e) = client_tx_sender_clone.send(tx_data).await {
+                                        eprintln!("Error sending ClientSubmitRawTransaction to channel: {}", e);
+                                    }
+                                }
                                 // Explicitly list other existing handlers or use a wildcard
                                 P2PMessage::Pulse => { /* Placeholder for actual Pulse handling if done in async block */ }
                                 P2PMessage::PulseResponse { .. } => { /* Placeholder */ }
@@ -1214,20 +1227,17 @@ impl NetworkBehaviourEventProcess<GossipsubEvent> for ConsensusBehaviour {
                                 P2PMessage::LeaderNominations { .. } => { /* Placeholder */ }
                                 P2PMessage::LeaderElectionVoteMsg(_) => { /* Placeholder */ }
                                 P2PMessage::NewLeaderList { .. } => { /* Placeholder */ }
-                                // Catch-all for any P2PMessage variants not explicitly handled above
-                                // _ => { println!("Received unhandled P2PMessage type in async block"); }
                                 P2PMessage::ValidationTaskAssignmentToUser{..} => {/* This message is not expected from peers */}
-                        P2PMessage::ProcessingTransactionGossip(entry) => {
-                            // This can be handled directly or also via channel if complex
-                            // For now, direct handling in this async block is complex due to &mut self.
-                            // It's better to send it to a channel for main loop processing.
-                            // This needs a new channel similar to VerifiedProcessingTxBroadcast.
-                            // For now, this specific gossip is not being put on a new channel.
-                            // This means handle_processing_transaction_gossip needs to be callable from here
-                            // or the main loop needs another channel for it.
-                             eprintln!("Received ProcessingTransactionGossip directly in spawn, needs channel for proper handling.");
-                        }
-                                P2PMessage::TransactionInvalidationNotice{..} => {/* Placeholder */}
+                                P2PMessage::ProcessingTransactionGossip(entry) => {
+                                    // This can be handled directly or also via channel if complex
+                                    // For now, direct handling in this async block is complex due to &mut self.
+                                    // It's better to send it to a channel for main loop processing.
+                                    // This needs a new channel similar to VerifiedProcessingTxBroadcast.
+                                    // For now, this specific gossip is not being put on a new channel.
+                                    // This means handle_processing_transaction_gossip needs to be callable from here
+                                    // or the main loop needs another channel for it.
+                                     eprintln!("Received ProcessingTransactionGossip directly in spawn, needs channel for proper handling.");
+                                }
                             }
                         });
                     }
@@ -1285,6 +1295,7 @@ pub async fn start_node(node_identity: NodeIdentity, db_path_str: &str) -> Resul
     let (simulate_alice_completion_sender, simulate_alice_completion_receiver) = mpsc::channel(10);
     let (verified_processing_tx_sender, verified_processing_tx_receiver) = mpsc::channel(100);
     let (invalidation_notice_sender, invalidation_notice_receiver) = mpsc::channel(100); // For Invalidation
+    let (client_submitted_tx_sender, client_submitted_tx_receiver) = mpsc::channel(100); // For client TXs
 
 
     let mut swarm = {
@@ -1321,6 +1332,8 @@ pub async fn start_node(node_identity: NodeIdentity, db_path_str: &str) -> Resul
             verified_processing_tx_receiver,
             invalidation_notice_sender, // For Invalidation
             invalidation_notice_receiver, // For Invalidation
+            client_submitted_tx_sender, // For client TXs
+            client_submitted_tx_receiver, // For client TXs
         };
         SwarmBuilder::new(transport, behaviour, local_peer_id.clone())
             .executor(Box::new(|fut| { tokio::spawn(fut); }))
@@ -1545,8 +1558,16 @@ pub async fn start_node(node_identity: NodeIdentity, db_path_str: &str) -> Resul
                     }
                 }
             },
+            Some(client_tx_data) = swarm.behaviour_mut().client_submitted_tx_receiver.recv() => {
+                println!("MainLoop: Received ClientSubmitRawTransaction with TxData for user {}. Processing.", client_tx_data.user);
+                // This node must be a leader to process it.
+                // The handle_incoming_raw_transaction function already checks for leadership.
+                if let Err(e) = swarm.behaviour_mut().handle_incoming_raw_transaction(client_tx_data).await {
+                    eprintln!("Error handling client submitted raw transaction: {}", e);
+                }
+            },
             // Existing MPSC channel handlers...
-            Some(gossiped_entry) = swarm.behaviour_mut().gossiped_tx_receiver.recv() => { /* ... as before ... */ },
+            // Some(gossiped_entry) = swarm.behaviour_mut().gossiped_tx_receiver.recv() => { /* ... as before ... */ }, // This is duplicated below, removing one.
             Some(message) = swarm.behaviour_mut().offer_val_task_receiver.recv() => { /* ... as before ... */ },
             Some(message) = swarm.behaviour_mut().user_task_completion_receiver.recv() => { /* ... as before ... */ },
             Some(message) = swarm.behaviour_mut().forwarded_completion_receiver.recv() => { /* ... as before ... */ },

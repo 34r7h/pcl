@@ -1,7 +1,15 @@
 [package]
 name = "consensus_node"
 version = "0.1.0"
-edition = "2024"
+edition = "2021" # Changed from 2024 for wider compatibility
+
+[lib]
+name = "consensus_node_lib"
+path = "src/lib.rs"
+
+[[bin]]
+name = "consensus_node"
+path = "src/main.rs"
 
 [dependencies]
 rocksdb = "0.21"

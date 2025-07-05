@@ -417,6 +417,9 @@ pub enum P2PMessage {
     },
     ProcessingTransactionGossip(Box<ProcessingTxMempoolEntry>), // Used by leaders after finality checks
     TransactionInvalidationNotice { tx_id: String, reason: String },
+
+    // Message for simulator/client to submit a transaction
+    ClientSubmitRawTransaction(TxData),
 }
 
 
