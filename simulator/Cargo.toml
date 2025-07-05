@@ -1,0 +1,51 @@
+[package]
+name = "pcl-simulator"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Backend integration
+pcl-backend = { path = "../backend" }
+
+# Async runtime
+tokio = { version = "1.0", features = ["full"] }
+tokio-stream = "0.1"
+
+# CLI and configuration
+clap = { version = "4.0", features = ["derive"] }
+config = "0.14"
+
+# Logging and monitoring
+log = "0.4"
+env_logger = "0.10"
+tracing = "0.1"
+tracing-subscriber = "0.3"
+
+# Randomization and simulation
+rand = "0.8"
+uuid = { version = "1.0", features = ["v4", "serde"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Time and scheduling
+chrono = { version = "0.4", features = ["serde"] }
+
+# Statistics and metrics
+prometheus = "0.13"
+metrics = "0.23"
+
+# Network simulation
+libp2p = { version = "0.53", features = ["gossipsub", "tcp", "noise", "yamux", "mdns", "identify"] }
+
+# Database for simulation results
+rocksdb = "0.21"
+
+# Progress bars and CLI UX
+indicatif = "0.17"
+console = "0.15"
+
+[dev-dependencies]
+criterion = "0.5"
+tempfile = "3.0" 
