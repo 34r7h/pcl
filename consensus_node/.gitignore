@@ -1,0 +1,6 @@
+# Ignore RocksDB database directories
+db_*/
+
+# Ignore build artifacts
+target/
+Cargo.lock
