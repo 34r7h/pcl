@@ -1,0 +1,10 @@
+[workspace]
+members = [
+    "peer_consensus_node",
+    "consensus_simulator",
+]
+
+# Default member for `cargo run` etc. can be specified if needed,
+# but often you'd run `cargo run -p <package_name>`
+# default-members = ["peer_consensus_node"] # Optional
+resolver = "2" # Specifies to use the version 2 feature resolver
