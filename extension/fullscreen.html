@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>XMBL Wallet - Dashboard</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      color: white;
+    }
+    
+    .header {
+      padding: 20px;
+      background: rgba(0, 0, 0, 0.2);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    
+    .logo {
+      font-size: 28px;
+      font-weight: bold;
+    }
+    
+    .nav {
+      display: flex;
+      gap: 20px;
+    }
+    
+    .nav-btn {
+      padding: 10px 20px;
+      background: rgba(255, 255, 255, 0.2);
+      border: none;
+      border-radius: 8px;
+      color: white;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+    
+    .nav-btn:hover {
+      background: rgba(255, 255, 255, 0.3);
+    }
+    
+    .nav-btn.active {
+      background: #4CAF50;
+    }
+    
+    .container {
+      padding: 40px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 30px;
+      margin-bottom: 40px;
+    }
+    
+    .card {
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 15px;
+      padding: 30px;
+      backdrop-filter: blur(10px);
+    }
+    
+    .card h3 {
+      font-size: 24px;
+      margin-bottom: 15px;
+    }
+    
+    .balance-card .balance {
+      font-size: 48px;
+      font-weight: bold;
+      margin: 20px 0;
+    }
+    
+    .stats-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 15px;
+    }
+    
+    .stat {
+      text-align: center;
+      padding: 15px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 10px;
+    }
+    
+    .stat-value {
+      font-size: 24px;
+      font-weight: bold;
+    }
+    
+    .stat-label {
+      font-size: 12px;
+      opacity: 0.7;
+      margin-top: 5px;
+    }
+    
+    .transactions-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+    }
+    
+    .transactions-table th,
+    .transactions-table td {
+      padding: 15px;
+      text-align: left;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    
+    .transactions-table th {
+      background: rgba(255, 255, 255, 0.1);
+    }
+    
+    .tx-hash {
+      font-family: monospace;
+      font-size: 12px;
+    }
+    
+    .btn {
+      padding: 12px 24px;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      margin-right: 10px;
+    }
+    
+    .btn-primary {
+      background: #4CAF50;
+      color: white;
+    }
+    
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.2);
+      color: white;
+    }
+    
+    .btn:hover {
+      transform: translateY(-2px);
+    }
+    
+    .form-group {
+      margin-bottom: 20px;
+    }
+    
+    .form-group label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: bold;
+    }
+    
+    .form-group input {
+      width: 100%;
+      padding: 12px;
+      border: none;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.1);
+      color: white;
+      font-size: 16px;
+    }
+    
+    .form-group input::placeholder {
+      color: rgba(255, 255, 255, 0.5);
+    }
+    
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 1000;
+    }
+    
+    .modal-content {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      padding: 40px;
+      border-radius: 15px;
+      min-width: 400px;
+    }
+    
+    .hidden {
+      display: none;
+    }
+    
+    .address-display {
+      font-family: monospace;
+      background: rgba(0, 0, 0, 0.2);
+      padding: 10px;
+      border-radius: 8px;
+      word-break: break-all;
+      margin: 10px 0;
+    }
+    
+    .network-indicator {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    .status-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: #ff6b6b;
+    }
+    
+    .status-dot.connected {
+      background: #4CAF50;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="logo">XMBL Wallet Dashboard</div>
+    <div class="nav">
+      <button class="nav-btn active" data-view="dashboard">Dashboard</button>
+      <button class="nav-btn" data-view="send">Send</button>
+      <button class="nav-btn" data-view="receive">Receive</button>
+      <button class="nav-btn" data-view="settings">Settings</button>
+    </div>
+    <div class="network-indicator">
+      <div class="status-dot" id="networkStatus"></div>
+      <span id="networkText">Offline</span>
+    </div>
+  </div>
+
+  <div class="container">
+    <!-- Dashboard View -->
+    <div id="dashboard-view">
+      <div class="dashboard-grid">
+        <!-- Balance Card -->
+        <div class="card balance-card">
+          <h3>Balance</h3>
+          <div class="balance" id="fullscreen-balance">0.00 XMBL</div>
+          <div id="fullscreen-address" class="address-display">Loading...</div>
+        </div>
+
+        <!-- Network Stats -->
+        <div class="card">
+          <h3>Network Status</h3>
+          <div class="stats-grid">
+            <div class="stat">
+              <div class="stat-value" id="node-status">●</div>
+              <div class="stat-label">Node</div>
+            </div>
+            <div class="stat">
+              <div class="stat-value" id="simulator-status">●</div>
+              <div class="stat-label">Simulator</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Transaction Stats -->
+        <div class="card">
+          <h3>Transactions</h3>
+          <div class="stats-grid">
+            <div class="stat">
+              <div class="stat-value" id="tx-count">0</div>
+              <div class="stat-label">Total</div>
+            </div>
+            <div class="stat">
+              <div class="stat-value" id="tx-pending">0</div>
+              <div class="stat-label">Pending</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Recent Transactions -->
+      <div class="card">
+        <h3>Recent Transactions</h3>
+        <table class="transactions-table">
+          <thead>
+            <tr>
+              <th>Hash</th>
+              <th>From</th>
+              <th>To</th>
+              <th>Amount</th>
+              <th>Status</th>
+              <th>Time</th>
+            </tr>
+          </thead>
+          <tbody id="transactions-tbody">
+            <tr>
+              <td colspan="6" style="text-align: center; opacity: 0.5;">No transactions yet</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Send View -->
+    <div id="send-view" class="hidden">
+      <div class="card">
+        <h3>Send XMBL</h3>
+        <form id="send-form">
+          <div class="form-group">
+            <label for="send-to">Recipient Address</label>
+            <input type="text" id="send-to" placeholder="Enter XMBL address..." required>
+          </div>
+          <div class="form-group">
+            <label for="send-amount">Amount</label>
+            <input type="number" id="send-amount" placeholder="0.00" step="0.01" min="0" required>
+          </div>
+          <button type="submit" class="btn btn-primary">Send Transaction</button>
+          <button type="button" class="btn btn-secondary" onclick="clearSendForm()">Clear</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Receive View -->
+    <div id="receive-view" class="hidden">
+      <div class="card">
+        <h3>Receive XMBL</h3>
+        <p>Share this address to receive XMBL tokens:</p>
+        <div id="receive-address" class="address-display">Loading...</div>
+        <button class="btn btn-primary" onclick="copyAddress()">Copy Address</button>
+      </div>
+    </div>
+
+    <!-- Settings View -->
+    <div id="settings-view" class="hidden">
+      <div class="card">
+        <h3>Wallet Settings</h3>
+        <div class="form-group">
+          <label>Node URL</label>
+          <input type="text" id="node-url" value="http://localhost:8080">
+        </div>
+        <div class="form-group">
+          <label>Simulator URL</label>
+          <input type="text" id="simulator-url" value="http://localhost:3000">
+        </div>
+        <button class="btn btn-primary" onclick="saveSettings()">Save Settings</button>
+        <button class="btn btn-secondary" onclick="exportWallet()">Export Wallet</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="fullscreen.js"></script>
+</body>
+</html> 

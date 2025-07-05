@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>XMBL Wallet</title>
+  <style>
+    body {
+      width: 360px;
+      height: 500px;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+    }
+    .container {
+      padding: 20px;
+      height: 100%;
+      box-sizing: border-box;
+    }
+    .header {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    .logo {
+      font-size: 24px;
+      font-weight: bold;
+      margin-bottom: 5px;
+    }
+    .network-status {
+      font-size: 12px;
+      opacity: 0.8;
+    }
+    .wallet-section {
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 10px;
+      padding: 15px;
+      margin-bottom: 15px;
+    }
+    .balance {
+      font-size: 28px;
+      font-weight: bold;
+      text-align: center;
+      margin-bottom: 10px;
+    }
+    .address {
+      font-size: 12px;
+      text-align: center;
+      opacity: 0.7;
+      word-break: break-all;
+    }
+    .actions {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 15px;
+    }
+    .btn {
+      flex: 1;
+      padding: 12px;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: bold;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+    .btn-primary {
+      background: #4CAF50;
+      color: white;
+    }
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.2);
+      color: white;
+    }
+    .btn:hover {
+      transform: translateY(-2px);
+    }
+    .transactions {
+      max-height: 200px;
+      overflow-y: auto;
+    }
+    .transaction {
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 8px;
+      padding: 10px;
+      margin-bottom: 8px;
+      font-size: 12px;
+    }
+    .tx-hash {
+      opacity: 0.7;
+      word-break: break-all;
+    }
+    .fullscreen-btn {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: none;
+      border: none;
+      color: white;
+      font-size: 18px;
+      cursor: pointer;
+    }
+    .loading {
+      text-align: center;
+      padding: 20px;
+    }
+    .error {
+      color: #ff6b6b;
+      text-align: center;
+      padding: 10px;
+      background: rgba(255, 0, 0, 0.1);
+      border-radius: 5px;
+      margin-bottom: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <button class="fullscreen-btn" id="fullscreenBtn">⛶</button>
+    
+    <div class="header">
+      <div class="logo">XMBL Wallet</div>
+      <div class="network-status" id="networkStatus">Connecting...</div>
+    </div>
+
+    <div id="walletContent" class="loading">
+      <div>Loading wallet...</div>
+    </div>
+
+    <div id="noWallet" style="display: none;">
+      <div class="wallet-section">
+        <h3>Welcome to XMBL Wallet</h3>
+        <p>Create or import a wallet to get started</p>
+        <button class="btn btn-primary" id="createWalletBtn">Create Wallet</button>
+        <button class="btn btn-secondary" id="importWalletBtn">Import Wallet</button>
+      </div>
+    </div>
+
+    <div id="walletExists" style="display: none;">
+      <div class="wallet-section">
+        <div class="balance" id="balance">0.00 XMBL</div>
+        <div class="address" id="address">Loading...</div>
+      </div>
+
+      <div class="actions">
+        <button class="btn btn-primary" id="sendBtn">Send</button>
+        <button class="btn btn-secondary" id="receiveBtn">Receive</button>
+      </div>
+
+      <div class="wallet-section">
+        <h4>Recent Transactions</h4>
+        <div class="transactions" id="transactions">
+          <div class="transaction">
+            <div>No transactions yet</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="errorMessage" class="error" style="display: none;"></div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html> 

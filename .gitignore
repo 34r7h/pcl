@@ -70,3 +70,5 @@
 # Backend artifacts
 **/backend/target/
 **/backend/Cargo.lock
+
+backend/pcl_data/

@@ -3,6 +3,10 @@ name = "pcl-backend"
 version = "0.1.0"
 edition = "2021"
 
+[[bin]]
+name = "pcl-node"
+path = "src/main.rs"
+
 [dependencies]
 # Cryptography
 ed25519-dalek = { version = "2.0", features = ["serde", "rand_core"] }
