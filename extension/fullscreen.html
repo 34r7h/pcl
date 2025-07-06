@@ -297,6 +297,7 @@
       <button class="nav-btn active" data-view="dashboard">Dashboard</button>
       <button class="nav-btn" data-view="send">Send</button>
       <button class="nav-btn" data-view="receive">Receive</button>
+      <button class="nav-btn" data-view="mempool">Mempool</button>
       <button class="nav-btn" data-view="settings">Settings</button>
     </div>
     <div class="network-indicator">
@@ -451,6 +452,37 @@
         <p>Share this address to receive XMBL tokens:</p>
         <div id="receive-address" class="address-display">Loading...</div>
         <button class="btn btn-primary" onclick="copyAddress()">Copy Address</button>
+      </div>
+    </div>
+
+    <!-- Mempool View -->
+    <div id="mempool-view" class="hidden">
+      <div class="card">
+        <h3>Mempool</h3>
+        <div class="stats-grid">
+          <div class="stat">
+            <div class="stat-value" id="raw-tx-count">0</div>
+            <div class="stat-label">Raw Transactions</div>
+          </div>
+          <div class="stat">
+            <div class="stat-value" id="processing-tx-count">0</div>
+            <div class="stat-label">Processing</div>
+          </div>
+          <div class="stat">
+            <div class="stat-value" id="validation-task-count">0</div>
+            <div class="stat-label">Validation Tasks</div>
+          </div>
+          <div class="stat">
+            <div class="stat-value" id="locked-utxo-count">0</div>
+            <div class="stat-label">Locked UTXOs</div>
+          </div>
+        </div>
+        <div id="mempool-activity" class="mempool-activity">
+          <h3>Live Consensus Activity</h3>
+          <div id="activity-log" class="activity-log">
+            <div class="loading">Connecting to consensus mempool...</div>
+          </div>
+        </div>
       </div>
     </div>
 
