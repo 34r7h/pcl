@@ -96,12 +96,14 @@ class XMBLDashboard {
   }
 
   generateAddress(publicKey) {
+    // Generate truly random address using crypto.getRandomValues
     const hash = new Uint8Array(20);
-    const pubKeyArray = new Uint8Array(publicKey);
+    crypto.getRandomValues(hash);
     
-    // Simple address generation (first 20 bytes of hash)
+    // Mix with public key for uniqueness
+    const pubKeyArray = new Uint8Array(publicKey);
     for (let i = 0; i < 20; i++) {
-      hash[i] = pubKeyArray[i % pubKeyArray.length];
+      hash[i] ^= pubKeyArray[i % pubKeyArray.length];
     }
     
     return Array.from(hash).map(b => b.toString(16).padStart(2, '0')).join('');
