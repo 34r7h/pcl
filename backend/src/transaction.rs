@@ -105,9 +105,35 @@ impl TransactionData {
         }
     }
     
-    pub fn validate_signature(&self) -> bool {
-        // TODO: Implement signature validation
-        self.sig.is_some()
+    pub fn get_bytes_for_signing(&self) -> Result<Vec<u8>, serde_json::Error> {
+        let mut data_to_sign = self.clone();
+        data_to_sign.sig = None; // Signature must not be part of the signed payload
+        serde_json::to_vec(&data_to_sign)
+    }
+
+    pub fn validate_signature(&self, public_key: &ed25519_dalek::VerifyingKey) -> bool {
+        if self.sig.is_none() {
+            return false;
+        }
+        let signature_bytes = match hex::decode(self.sig.as_ref().unwrap()) {
+            Ok(bytes) => bytes,
+            Err(_) => return false, // Invalid hex for signature
+        };
+        let signature = match ed25519_dalek::Signature::from_bytes(&signature_bytes) {
+            Ok(sig) => sig,
+            Err(_) => return false, // Invalid signature format
+        };
+
+        match self.get_bytes_for_signing() {
+            Ok(message_bytes) => {
+                // Assuming crypto::verify_data_signature is available and correct
+                // We need to ensure the public_key is correctly retrieved for self.user
+                // For now, this function takes public_key as an argument.
+                // The caller (e.g., in consensus.rs) will be responsible for fetching the key.
+                crate::crypto::verify_data_signature(&message_bytes, &signature, public_key).unwrap_or(false)
+            }
+            Err(_) => false, // Serialization error
+        }
     }
     
     pub fn get_total_amount(&self) -> f64 {

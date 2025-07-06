@@ -104,36 +104,58 @@ class XMBLWallet {
     }
   }
 
-  generateAddress(publicKey) {
-    const hash = new Uint8Array(20);
-    const pubKeyArray = new Uint8Array(publicKey);
-    
-    // Simple address generation (first 20 bytes of hash)
-    for (let i = 0; i < 20; i++) {
-      hash[i] = pubKeyArray[i % pubKeyArray.length];
-    }
-    
-    return Array.from(hash).map(b => b.toString(16).padStart(2, '0')).join('');
+  generateAddress(publicKeyBytes) {
+    // Use the hex representation of the raw public key as the address
+    return Array.from(new Uint8Array(publicKeyBytes)).map(b => b.toString(16).padStart(2, '0')).join('');
   }
 
-  async sendTransaction(to, amount) {
+  async sendTransaction(toAddress, amountToSend) {
     try {
-      console.log('XMBL Wallet: Sending transaction...');
-      
-      const transaction = {
-        from: this.wallet.address,
-        to: to,
-        amount: amount,
-        timestamp: Date.now(),
-        nonce: Math.floor(Math.random() * 1000000)
+      if (!this.wallet) {
+        this.showError("Wallet not created or loaded.");
+        return false;
+      }
+      console.log('XMBL Wallet: Preparing transaction...');
+
+      // This is a simplified transaction structure for the popup.
+      // The backend will need to resolve UTXOs for self.wallet.address.
+      // Fees and stake are hardcoded for now.
+      const fee = 0.1;
+      const stake = 0.2;
+      const totalFromAmount = amountToSend + fee + stake; // Simplified: assume one UTXO covers this
+
+      const txDataPayload = {
+        to: [[toAddress, amountToSend]],
+        // from: [[ "alice_utxo_placeholder_id", totalFromAmount ]], // Placeholder for UTXO management
+        // For now, the backend will need to figure out Alice's UTXOs.
+        // Or, the simulator should be used for creating well-formed transactions.
+        // For the popup, we'll let the backend derive 'from' or use a default.
+        // Sending an empty 'from' or a special marker might be necessary.
+        // Let's send a simplified format and expect the backend to adapt or simulate UTXO usage.
+        from_address: this.wallet.address, // Sending from address instead of specific UTXOs
+        amount: amountToSend, // Total amount being sent to recipients
+        user: this.wallet.address, // Alice's address (public key hex)
+        stake: stake,
+        fee: fee,
+        timestamp: new Date().toISOString(), // Use ISO string for backend compatibility
+        // Nonce can be handled by backend or incremented in wallet state
+        nonce: Math.floor(Math.random() * 1000000000)
       };
 
-      // Sign transaction (simplified)
-      const signature = await this.signTransaction(transaction);
-      transaction.signature = signature;
+      // Sign the txDataPayload (without the 'sig' field itself)
+      const signatureHex = await this.signData(txDataPayload);
+      
+      const transactionToSend = {
+        ...txDataPayload,
+        sig: signatureHex, // Add hex signature
+      };
+
+      console.log('XMBL Wallet: Sending transaction:', JSON.stringify(transactionToSend, null, 2));
 
       // Send to node/simulator
-      const response = await fetch(`${this.nodeUrl}/transaction`, {
+      // The endpoint /transaction needs to be able to handle this structure
+      // and create a RawTransaction from it.
+      const response = await fetch(`${this.nodeUrl}/create_transaction`, { // Changed endpoint
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -156,10 +178,47 @@ class XMBLWallet {
     }
   }
 
-  async signTransaction(transaction) {
-    // Simplified signing (in real implementation, use proper Ed25519 signing)
-    const message = JSON.stringify(transaction);
-    return btoa(message).substring(0, 32);
+  async signData(dataToSign) {
+    try {
+      if (!this.wallet || !this.wallet.privateKey) {
+        throw new Error("Private key not available for signing.");
+      }
+
+      const privateKeyBytes = new Uint8Array(this.wallet.privateKey);
+
+      const importedPrivateKey = await window.crypto.subtle.importKey(
+        'pkcs8', // Private key format
+        privateKeyBytes.buffer,
+        {
+          name: 'Ed25519',
+          namedCurve: 'Ed25519',
+        },
+        true, // extractable
+        ['sign'] // key usages
+      );
+
+      // Prepare message: Convert data to JSON string, then to Uint8Array
+      // Ensure the 'sig' field is not part of the payload being signed.
+      const payloadToSign = { ...dataToSign };
+      if ('sig' in payloadToSign) {
+        delete payloadToSign.sig;
+      }
+      const messageString = JSON.stringify(payloadToSign);
+      const messageBytes = new TextEncoder().encode(messageString);
+
+      const signatureBytes = await window.crypto.subtle.sign(
+        'Ed25519',
+        importedPrivateKey,
+        messageBytes
+      );
+
+      // Convert signature to hex string
+      return Array.from(new Uint8Array(signatureBytes)).map(b => b.toString(16).padStart(2, '0')).join('');
+    } catch (error) {
+      console.error('XMBL Wallet: Error signing data:', error);
+      this.showError('Failed to sign transaction data.');
+      throw error; // Re-throw to be caught by sender
+    }
   }
 
   setupEventListeners() {

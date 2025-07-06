@@ -84,14 +84,77 @@ pub struct UtxoEntry {
     pub spent: bool,
 }
 
+// Data stored in UptimeMempool about each *other* node that this node observes.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PulseData {
-    pub node_id: String,
-    pub family_id: Uuid,
-    pub pulse_timestamp: DateTime<Utc>,
-    pub response_time_ms: u64,
-    pub uptime_percentage: f64,
+pub struct ObservedNodePulseData {
+    pub node_id: String, // PeerId of the observed node
+    pub last_pulse_received_at: Option<DateTime<Utc>>,
+    // History of actual pulse timestamps received from this node. Prune periodically.
+    pub pulse_receipt_history: Vec<DateTime<Utc>>,
+    // History of response times received *from* this node for pulses *we* sent. Prune periodically.
+    pub response_time_samples_ms: Vec<u64>,
+    // Could add first_seen, etc. for more robust uptime calculation over defined windows.
 }
+
+impl ObservedNodePulseData {
+    fn new(node_id: String) -> Self {
+        Self {
+            node_id,
+            last_pulse_received_at: None,
+            pulse_receipt_history: Vec::new(),
+            response_time_samples_ms: Vec::new(),
+        }
+    }
+
+    fn record_pulse_receipt(&mut self, received_at: DateTime<Utc>) {
+        self.last_pulse_received_at = Some(received_at);
+        self.pulse_receipt_history.push(received_at);
+        // Prune history (e.g., keep last N or within X duration)
+        if self.pulse_receipt_history.len() > 100 { // Example: keep last 100
+            self.pulse_receipt_history.drain(0..self.pulse_receipt_history.len() - 100);
+        }
+    }
+
+    fn record_response_time(&mut self, rt_ms: u64) {
+        self.response_time_samples_ms.push(rt_ms);
+        // Prune history
+        if self.response_time_samples_ms.len() > 50 { // Example: keep last 50
+            self.response_time_samples_ms.drain(0..self.response_time_samples_ms.len() - 50);
+        }
+    }
+
+    // Calculates uptime based on recent pulse history.
+    // `pulse_interval_secs`: The expected interval of pulses from other nodes.
+    // `window_duration_secs`: How far back to look for uptime calculation.
+    // Returns a percentage (0.0 to 100.0).
+    fn calculate_uptime(&self, pulse_interval_secs: u64, window_duration_secs: u64) -> f64 {
+        if self.pulse_receipt_history.is_empty() {
+            return 0.0;
+        }
+        let window_start_time = Utc::now() - chrono::Duration::seconds(window_duration_secs as i64);
+
+        let pulses_in_window = self.pulse_receipt_history.iter()
+            .filter(|&&t| t >= window_start_time)
+            .count();
+
+        // Max number of pulses expected in the window.
+        // Add 1 to account for the pulse at the very start of the window.
+        let max_expected_pulses_in_window = (window_duration_secs / pulse_interval_secs).max(1); // Avoid division by zero if interval is 0
+
+        if max_expected_pulses_in_window == 0 { return 100.0; } // Should not happen with max(1)
+
+        (pulses_in_window as f64 / max_expected_pulses_in_window as f64).min(1.0) * 100.0
+    }
+
+    fn get_average_response_time(&self) -> Option<f64> {
+        if self.response_time_samples_ms.is_empty() {
+            return None;
+        }
+        let sum: u64 = self.response_time_samples_ms.iter().sum();
+        Some(sum as f64 / self.response_time_samples_ms.len() as f64)
+    }
+}
+
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PulseResponse {
@@ -157,8 +220,22 @@ impl MempoolManager {
         self.tx.finalize_transaction(tx_id, validator_sig)
     }
 
-    pub fn record_pulse(&mut self, node_id: String, family_id: Uuid, response_time_ms: u64) -> Result<()> {
-        self.uptime.record_pulse(node_id, family_id, response_time_ms)
+    // Call this when this node *receives* a PulseMessage from another node
+    pub fn record_received_pulse(&mut self, sender_peer_id: String, family_id_pulsed: Uuid, pulse_received_at: DateTime<Utc>) -> Result<()> {
+        self.uptime.record_received_pulse(sender_peer_id, family_id_pulsed, pulse_received_at)
+    }
+
+    // Call this when this node *receives* a PulseResponseMessage from another node
+    pub fn record_received_pulse_response(&mut self, responder_peer_id: String, original_pulse_id: String, response_time_ms: u64, response_received_at: DateTime<Utc>) -> Result<()> {
+        self.uptime.record_received_pulse_response(responder_peer_id, original_pulse_id, response_time_ms, response_received_at)
+    }
+
+    pub fn calculate_node_uptime_percentage(&self, node_peer_id: &str) -> f64 {
+        self.uptime.calculate_uptime_percentage(node_peer_id)
+    }
+
+    pub fn get_node_average_response_time(&self, node_peer_id: &str) -> Option<f64> {
+        self.uptime.get_average_response_time(node_peer_id)
     }
 
     pub fn invalidate_transaction(&mut self, tx_id: &str) -> Result<()> {
@@ -417,59 +494,74 @@ impl TxMempool {
     }
 }
 
+// UptimeMempool stores ObservedNodePulseData for other nodes.
+// It also needs to know the expected pulse interval and window for uptime calculations.
+// These could be configurable.
+const DEFAULT_EXPECTED_PULSE_INTERVAL_SECS: u64 = 20; // From README
+const DEFAULT_UPTIME_WINDOW_SECS: u64 = 300; // e.g., 5 minutes, should be multiple of interval
+
 impl UptimeMempool {
     pub fn new() -> Self {
         Self {
+            // node_id (PeerId string) -> ObservedNodePulseData
             pulse_data: HashMap::new(),
+            // family_id -> Vec<PulseResponse (from nodes in that family responding to our pulse)>
+            // This might be less useful if pulses are family-to-family, not specific node to family.
+            // For now, let's assume it stores responses to pulses *we* sent.
             family_responses: HashMap::new(),
-            response_times: HashMap::new(),
+             // This seems redundant if ObservedNodePulseData stores response_time_samples_ms
+            response_times: HashMap::new(), // node_id (PeerId str) -> Vec<response_times_ms>
         }
     }
 
-    pub fn record_pulse(&mut self, node_id: String, family_id: Uuid, response_time_ms: u64) -> Result<()> {
-        let pulse_data = PulseData {
-            node_id: node_id.clone(),
-            family_id,
-            pulse_timestamp: Utc::now(),
-            response_time_ms,
-            uptime_percentage: 100.0, // Placeholder calculation
-        };
-        
-        self.pulse_data.insert(node_id.clone(), pulse_data);
-        self.response_times.entry(node_id).or_insert_with(Vec::new).push(response_time_ms);
-        
+    // Called when this node *receives* a PulseMessage from another node (identified by its Node UUID)
+    pub fn record_received_pulse(&mut self, sender_node_uuid: String, _family_id_pulsed: Uuid, pulse_received_at: DateTime<Utc>) -> Result<()> {
+        let data = self.pulse_data.entry(sender_node_uuid.clone()).or_insert_with(|| ObservedNodePulseData::new(sender_node_uuid));
+        data.record_pulse_receipt(pulse_received_at);
         Ok(())
     }
 
-    pub fn record_pulse_response(&mut self, family_id: Uuid, responder_id: String, pulse_id: String, response_time_ms: u64) -> Result<()> {
-        let response = PulseResponse {
-            responder_id,
-            pulse_id,
-            response_time_ms,
-            timestamp: Utc::now(),
-        };
-        
-        self.family_responses.entry(family_id).or_insert_with(Vec::new).push(response);
+    // Called when this node *receives* a PulseResponseMessage from another node (identified by its Node UUID)
+    // (in response to a pulse *we* sent earlier, identified by original_pulse_id)
+    pub fn record_received_pulse_response(&mut self, responder_node_uuid: String, _original_pulse_id: String, response_time_ms: u64, _response_received_at: DateTime<Utc>) -> Result<()> {
+        let data = self.pulse_data.entry(responder_node_uuid.clone()).or_insert_with(|| ObservedNodePulseData::new(responder_node_uuid));
+        data.record_response_time(response_time_ms);
+
+        // The separate self.response_times map is largely redundant now if ObservedNodePulseData handles it.
+        // For consistency, if we keep it, it should also be keyed by node_uuid.
+        // Let's remove its direct update here and rely on ObservedNodePulseData for avg response time.
+        // self.response_times.entry(data.node_id.clone()).or_insert_with(Vec::new).push(response_time_ms);
+        // if self.response_times.get(&data.node_id).map_or(false, |v| v.len() > 50) {
+        //      self.response_times.get_mut(&data.node_id).unwrap().drain(0..1);
+        // }
         Ok(())
     }
 
-    pub fn get_average_response_time(&self, node_id: &str) -> Option<f64> {
-        self.response_times.get(node_id).and_then(|times| {
-            if times.is_empty() {
-                None
-            } else {
-                let sum: u64 = times.iter().sum();
-                Some(sum as f64 / times.len() as f64)
-            }
-        })
-    }
-
-    pub fn calculate_uptime_percentage(&self, node_id: &str) -> f64 {
-        // Placeholder uptime calculation
-        if self.pulse_data.contains_key(node_id) {
-            95.0 // Placeholder
+    // Calculates uptime for a given node (identified by its Node UUID) based on its observed pulse history.
+    pub fn calculate_uptime_percentage(&self, node_uuid: &str) -> f64 {
+        if let Some(data) = self.pulse_data.get(node_uuid) {
+            data.calculate_uptime(DEFAULT_EXPECTED_PULSE_INTERVAL_SECS, DEFAULT_UPTIME_WINDOW_SECS)
         } else {
-            0.0
+            0.0 // Node not observed or no pulses recorded
         }
     }
-} 
+
+    // Gets average response time for a given node (identified by its Node UUID) based on its recorded responses.
+    pub fn get_average_response_time(&self, node_uuid: &str) -> Option<f64> {
+        self.pulse_data.get(node_uuid)
+            .and_then(|data| data.get_average_response_time())
+    }
+
+    // Method to remove old/inactive nodes from pulse_data to prevent unbounded growth
+    pub fn prune_inactive_nodes(&mut self, inactivity_threshold_secs: i64) {
+        let threshold_time = Utc::now() - chrono::Duration::seconds(inactivity_threshold_secs);
+        self.pulse_data.retain(|_node_uuid, data| { // Key is now node_uuid
+            data.last_pulse_received_at.map_or(false, |last_seen| last_seen >= threshold_time) ||
+            (!data.response_time_samples_ms.is_empty())
+        });
+        // Also prune the redundant self.response_times if it's kept
+        self.response_times.retain(|node_uuid, times| {
+            self.pulse_data.contains_key(node_uuid) && !times.is_empty()
+        });
+    }
+}

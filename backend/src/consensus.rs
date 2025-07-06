@@ -23,7 +23,9 @@ pub struct ConsensusManager {
     pub mempool: Arc<RwLock<MempoolManager>>,
     pub network_manager: Arc<Mutex<NetworkManager>>,
     pub storage_manager: Arc<StorageManager>,
-    pub local_node: Node,
+    pub local_node: Node, // Represents the conceptual node identity
+    pub local_peer_id: String, // libp2p PeerId of this node
+    pub local_node_keypair: Arc<NodeKeypair>, // Added for signing
     pub leader_election: Arc<RwLock<LeaderElectionManager>>,
     pub pulse_system: Arc<RwLock<PulseSystem>>,
     pub transaction_processor: Arc<RwLock<TransactionProcessor>>,
@@ -41,9 +43,18 @@ pub struct LeaderElectionManager {
     pub broadcasting_cycle: Arc<RwLock<BroadcastingCycle>>,
 }
 
+// Helper struct for leader election candidates - internal to ConsensusManager logic
+#[derive(Debug, Clone)]
+struct CandidateInfo {
+    node_uuid: String, // Application Node UUID
+    performance_score: f64,
+    uptime_score: f64,
+    combined_score: f64,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VotingData {
-    pub candidate_id: String,
+    pub candidate_id: String, // Application Node UUID
     pub votes: u64,
     pub performance_score: f64,
     pub uptime_score: f64,
@@ -155,6 +166,8 @@ pub struct LeaderPerformance {
 impl ConsensusManager {
     pub fn new(
         local_node: Node,
+        local_peer_id: String, // Added for libp2p
+        local_node_keypair: NodeKeypair, // Added for signing
         network_manager: NetworkManager,
         storage_manager: StorageManager,
     ) -> Result<Self> {
@@ -162,6 +175,7 @@ impl ConsensusManager {
         let mempool = Arc::new(RwLock::new(MempoolManager::new()));
         let network_manager = Arc::new(Mutex::new(network_manager));
         let storage_manager = Arc::new(storage_manager);
+        let local_node_keypair = Arc::new(local_node_keypair);
         
         let leader_election = Arc::new(RwLock::new(LeaderElectionManager::new()));
         let pulse_system = Arc::new(RwLock::new(PulseSystem::new()));
@@ -175,6 +189,8 @@ impl ConsensusManager {
             network_manager,
             storage_manager,
             local_node,
+            local_peer_id,
+            local_node_keypair,
             leader_election,
             pulse_system,
             transaction_processor,
@@ -232,9 +248,32 @@ impl ConsensusManager {
         Ok(())
     }
 
-    async fn step1_alice_creates_transaction(&self, tx: RawTransaction) -> Result<TransactionWorkflowState> {
+    async fn step1_alice_creates_transaction(&self, mut tx: RawTransaction) -> Result<TransactionWorkflowState> {
         log::debug!("Step 1: Alice creates transaction {}", tx.raw_tx_id);
+
+        // Validate Alice's signature
+        // tx.tx_data.user is expected to be the hex string of Alice's public key
+        let alice_public_key_hex = tx.tx_data.user.clone();
         
+        let node_registry = self.node_registry.read().await;
+        // Find Alice's node by iterating through the registry and matching public key hex.
+        // This is inefficient; a map in NodeRegistry from pubkey_hex to Node would be better.
+        let alice_node_opt = node_registry.nodes.values().find(|n| {
+            hex::encode(n.public_key.as_bytes()) == alice_public_key_hex
+        });
+
+        let alice_node = alice_node_opt
+            .ok_or_else(|| PclError::NodeNotFound(format!("Alice's node with pubkey hex {} not found in registry", alice_public_key_hex)))?;
+
+        if !tx.tx_data.validate_signature(&alice_node.public_key) {
+            log::warn!("Invalid signature for transaction {} from user (pubkey hex {})", tx.raw_tx_id, alice_public_key_hex);
+            return Err(PclError::InvalidSignature("Alice's transaction signature is invalid".to_string()));
+        }
+        log::info!("Alice's signature validated for transaction {}", tx.raw_tx_id);
+
+        // Ensure the transaction's user field (Alice's pubkey hex) is correctly set.
+        // tx.tx_data.user should already be this from the sender.
+
         // Add to raw transaction mempool
         let mut mempool = self.mempool.write().await;
         mempool.add_raw_transaction(tx.clone())?;
@@ -270,11 +309,21 @@ impl ConsensusManager {
         log::debug!("Step 2: Charlie processes transaction {}", workflow_state.tx_id);
         
         if let Some(raw_tx) = &workflow_state.workflow_data.alice_transaction {
+            // Charlie (local_node) signs the transaction data
+            // The data to be signed for ProcessingTransaction could be raw_tx.tx_data or its hash.
+            // Let's assume Charlie signs raw_tx.tx_data.
+            let data_to_sign_bytes = raw_tx.tx_data.get_bytes_for_signing()
+                .map_err(|e| PclError::SerializationError(format!("Failed to serialize tx_data for signing: {}", e)))?;
+
+            let local_keypair = self.local_node_keypair.as_ref();
+            let leader_signature = local_keypair.sign_data(&data_to_sign_bytes);
+            let leader_signature_hex = hex::encode(leader_signature.to_bytes());
+
             // Create processing transaction
             let processing_tx = ProcessingTransaction::new(
                 raw_tx.raw_tx_id.clone(),
                 raw_tx.tx_data.clone(),
-                "leader_signature".to_string(), // Would be actual signature
+                leader_signature_hex, // Real signature
                 self.local_node.id.to_string(),
             );
             
@@ -285,7 +334,7 @@ impl ConsensusManager {
             
             // Gossip transaction to network
             let mut network = self.network_manager.lock().await;
-            network.gossip_transaction(raw_tx).await?;
+            network.gossip_transaction(self.local_peer_id.clone(), raw_tx).await?;
             drop(network);
             
             workflow_state.workflow_data.charlie_processing = Some(processing_tx);
@@ -331,9 +380,23 @@ impl ConsensusManager {
         drop(mempool);
         
         // Send tasks via network
+        // We need Alice's PeerId string here.
+        // For now, using Alice's Node UUID string as a placeholder for her PeerId string.
+        // This requires a mechanism to map Node UUID to actual PeerId for topic subscription.
+        let alice_id_str_for_topic = workflow_state.workflow_data.alice_transaction.as_ref()
+            .map(|tx| tx.tx_data.user.clone()) // This is Alice's pubkey hex, used as ID in step 1
+            .ok_or_else(|| PclError::InvalidState("Missing Alice's transaction for task assignment".to_string()))?;
+            // A better way would be to find alice_node again and use a peer_id field from it, if available.
+            // For now, assume alice_id_str_for_topic (pubkey hex) is the target for the topic.
+            // Or, if nodes subscribe to topics by their UUID:
+            // let alice_node_uuid_str = node_registry.nodes.values().find(|n| hex::encode(n.public_key.as_bytes()) == alice_id_str_for_topic).map(|n| n.id.to_string()).unwrap_or_default();
+
+
         let mut network = self.network_manager.lock().await;
         for task in &validation_tasks {
-            network.send_validation_task(task, "alice_node_id").await?;
+            // The 'target_node' for send_validation_task should be Alice's PeerId string.
+            // Using alice_id_str_for_topic (which is her pubkey hex, or could be her Node UUID string)
+            network.send_validation_task(task, &alice_id_str_for_topic).await?;
         }
         drop(network);
         
@@ -398,12 +461,30 @@ impl ConsensusManager {
     async fn step6_validator_broadcasts_and_finalizes(&self, mut workflow_state: TransactionWorkflowState) -> Result<TransactionWorkflowState> {
         log::debug!("Step 6: Validator broadcasts and finalizes tx {}", workflow_state.tx_id);
         
+        let alice_tx_data = workflow_state.workflow_data.alice_transaction.as_ref()
+            .ok_or_else(|| PclError::InvalidState("Missing Alice's transaction data in workflow".to_string()))?
+            .tx_data.clone();
+
+        // Calculate XMBL cubic root from the transaction data
+        let xmbl_root = alice_tx_data.calculate_digital_root() as u8;
+
+        // Validator (local_node in this simplified context) signs the finalized transaction details.
+        // The data to sign should include key elements like tx_id and xmbl_root.
+        // For simplicity, let's sign a concatenation of tx_id and xmbl_root.
+        // In a real system, this would be a well-defined structure.
+        let data_to_sign_str = format!("{}:{}", workflow_state.tx_id, xmbl_root);
+        let data_to_sign_bytes = data_to_sign_str.as_bytes();
+
+        let local_keypair = self.local_node_keypair.as_ref();
+        let validator_signature = local_keypair.sign_data(&data_to_sign_bytes);
+        let validator_signature_hex = hex::encode(validator_signature.to_bytes());
+
         // Create finalized transaction
         let finalized_tx = FinalizedTransaction {
             tx_id: workflow_state.tx_id.clone(),
-            tx_data: workflow_state.workflow_data.alice_transaction.as_ref().unwrap().tx_data.clone(),
-            xmbl_cubic_root: 5, // Would be calculated from XMBL Cubic DLT
-            validator_signature: "validator_signature".to_string(),
+            tx_data: alice_tx_data,
+            xmbl_cubic_root: xmbl_root, // Calculated XMBL root
+            validator_signature: validator_signature_hex, // Real signature
             finalized_at: Utc::now(),
         };
         
@@ -430,40 +511,74 @@ impl ConsensusManager {
 
     // Pulse system implementation
     async fn start_pulse_system(&self) -> Result<()> {
-        log::info!("Starting pulse system");
-        
-        // TODO: Implement background pulse system
-        // Commenting out for now due to Send/Sync issues with NetworkManager
+        log::info!("Starting pulse system for node {}", self.local_peer_id);
+        let self_clone = self.clone(); // Clone Arc references for the async task
+
+        tokio::spawn(async move {
+            // Determine pulse interval from PulseSystem settings
+            let pulse_interval_duration = {
+                let ps = self_clone.pulse_system.read().await;
+                Duration::from_secs(ps.pulse_interval_seconds)
+            };
+            let mut interval = interval(pulse_interval_duration);
+
+            loop {
+                interval.tick().await;
+                log::debug!("Node {} sending pulse...", self_clone.local_peer_id);
+                if let Err(e) = self_clone.send_pulse().await {
+                    log::error!("Error sending pulse for node {}: {}", self_clone.local_peer_id, e);
+                }
+            }
+        });
         
         Ok(())
     }
 
+    // Called periodically by start_pulse_system
     async fn send_pulse(&self) -> Result<()> {
-        let pulse_system = self.pulse_system.read().await;
-        if let Some(family_id) = pulse_system.family_assignments.get(&self.local_node.id.to_string()) {
-            let family_id = *family_id;
-            drop(pulse_system);
-            
+        let pulse_system_rl = self.pulse_system.read().await;
+
+        // Determine which family_id to send to.
+        // The current logic uses local_node.id (UUID) to find family.
+        // This assumes family_assignments maps Node UUID to Family UUID.
+        let family_id_to_pulse = pulse_system_rl.family_assignments.get(&self.local_node.id.to_string()).cloned();
+
+        if let Some(family_id) = family_id_to_pulse {
+            drop(pulse_system_rl); // Release read lock before acquiring write lock or network lock
+
+            log::debug!("Node {} attempting to send pulse to family {}", self.local_peer_id, family_id);
             let mut network = self.network_manager.lock().await;
-            network.send_pulse(family_id).await?;
+            network.send_pulse(self.local_peer_id.clone(), family_id).await?;
             drop(network);
             
-            // Update pulse data
-            let mut pulse_system = self.pulse_system.write().await;
-            pulse_system.last_pulse_time = Utc::now();
+            // Update this node's own last pulse time in its PulseSystem state
+            let mut pulse_system_wl = self.pulse_system.write().await;
+            pulse_system_wl.last_pulse_time = Utc::now();
             
-            let pulse_data = PulseData {
-                node_id: self.local_node.id.to_string(),
-                family_id,
-                pulse_count: pulse_system.pulse_data.get(&self.local_node.id.to_string())
-                    .map(|p| p.pulse_count + 1)
-                    .unwrap_or(1),
-                average_response_time_ms: 50.0, // Placeholder
-                uptime_percentage: 99.5, // Placeholder
-                last_pulse: Utc::now(),
-            };
+            // Update or create PulseData for this node within its own PulseSystem state
+            // This represents the node's own view of its pulse activity.
+            let node_id_key = self.local_node.id.to_string(); // Using Node UUID as key here
+            let current_pulse_count = pulse_system_wl.pulse_data.get(&node_id_key)
+                                     .map_or(0, |pd| pd.pulse_count);
+
+            let own_pulse_data_entry = pulse_system_wl.pulse_data.entry(node_id_key.clone()).or_insert_with(|| {
+                // Initialize if not present
+                PulseData {
+                    node_id: node_id_key.clone(), // Store own Node UUID
+                    family_id, // Family it belongs to / pulsed
+                    pulse_count: 0,
+                    // These are less relevant for self-entry, more for observed data of others
+                    average_response_time_ms: 0.0,
+                    uptime_percentage: 100.0, // Own uptime is considered 100% from its perspective
+                    last_pulse: Utc::now(),
+                }
+            });
             
-            pulse_system.pulse_data.insert(self.local_node.id.to_string(), pulse_data);
+            own_pulse_data_entry.pulse_count = current_pulse_count + 1;
+            own_pulse_data_entry.last_pulse = Utc::now();
+            // own_pulse_data_entry.uptime_percentage remains 100.0 for self.
+            // own_pulse_data_entry.average_response_time_ms is not applicable for self-sent pulse.
+            log::debug!("Updated own pulse data for node {}: count {}", node_id_key, own_pulse_data_entry.pulse_count);
         }
         
         Ok(())
@@ -556,21 +671,33 @@ impl ConsensusManager {
     }
 
     async fn calculate_performance_score(&self, node: &Node) -> f64 {
-        // Placeholder performance calculation
-        if node.role == NodeRole::Leader {
-            0.9
+        // Performance can be based on average response time. Lower is better.
+        // We need a way to normalize this into a score from 0.0 to 1.0.
+        // Example: Score = 1.0 - (avg_response_ms / max_observed_avg_response_ms_cap)
+        // Or, if very low response times are common, use a fixed scale.
+        let node_uuid_str = node.id.to_string();
+        let mempool = self.mempool.read().await;
+
+        if let Some(avg_rt) = mempool.get_node_average_response_time(&node_uuid_str) {
+            // Normalize: e.g., cap at 1000ms. Response times < 50ms get high score.
+            // (1 - (min(avg_rt, 1000.0) / 1000.0)) should give a score where lower RT is better.
+            // Let's try: if avg_rt < 50ms -> 1.0, if 500ms -> 0.5, if 1000ms -> 0.0
+            // Score = 1.0 - (avg_rt / 1000.0), clamped to [0.0, 1.0]
+            let score = 1.0 - (avg_rt / 1000.0);
+            score.max(0.0).min(1.0)
         } else {
-            0.7
+            0.1 // Default low score if no response time data
         }
     }
 
     async fn calculate_uptime_score(&self, node: &Node) -> f64 {
-        let pulse_system = self.pulse_system.read().await;
-        if let Some(pulse_data) = pulse_system.pulse_data.get(&node.id.to_string()) {
-            pulse_data.uptime_percentage / 100.0
-        } else {
-            0.5
-        }
+        // Query UptimeMempool using node's application-level UUID string
+        let node_uuid_str = node.id.to_string();
+        let mempool = self.mempool.read().await;
+        let uptime_percentage = mempool.calculate_node_uptime_percentage(&node_uuid_str);
+        // Ensure uptime_percentage is used correctly (e.g., already 0-100 or needs scaling)
+        // The calculate_node_uptime_percentage returns 0.0 to 100.0. So divide by 100 for score.
+        uptime_percentage / 100.0
     }
 
     // Background processing tasks
@@ -674,6 +801,140 @@ impl ConsensusManager {
         
         Ok(status)
     }
+
+    // Main handler for messages received from the network
+    pub async fn handle_network_message(&self, message: NetworkMessage) -> Result<()> {
+        match message {
+            NetworkMessage::Pulse(pulse_msg) => self.handle_pulse_message(pulse_msg).await,
+            NetworkMessage::PulseResponse(pulse_response_msg) => self.handle_pulse_response_message(pulse_response_msg).await,
+            NetworkMessage::TransactionGossip(tx_gossip_msg) => self.handle_transaction_gossip(tx_gossip_msg).await,
+            NetworkMessage::ValidationTask(validation_task_msg) => self.handle_validation_task_message(validation_task_msg).await,
+            NetworkMessage::LeaderElection(leader_election_msg) => self.handle_leader_election_message(leader_election_msg).await,
+            NetworkMessage::UptimeData(uptime_data_msg) => self.handle_uptime_data_message(uptime_data_msg).await,
+            // Add other message types as needed
+        }
+    }
+
+    async fn handle_pulse_message(&self, msg: PulseMessage) -> Result<()> {
+        log::debug!("Received PulseMessage from Node UUID {} (PeerId {}) for family {}", msg.sender_node_uuid, msg.sender_peer_id, msg.family_id);
+
+        // 1. Record the received pulse in UptimeMempool
+        let mut mempool = self.mempool.write().await;
+        mempool.record_received_pulse(msg.sender_node_uuid.clone(), msg.family_id, msg.timestamp)?;
+        drop(mempool);
+
+        // 2. Send a PulseResponseMessage back to the sender
+        //    We need the sender's PeerId (msg.sender_peer_id) to target the response.
+        //    The response time is calculated by the recipient of the response.
+        //    Here, we are just acknowledging the pulse. The actual response time will be
+        //    calculated by msg.sender_peer_id when it receives our response.
+        //    For now, let's set response_time_ms to 0, as it's not used by the receiver of PulseResponseMessage in this way.
+        //    The critical part is that the original sender measures the RTT.
+
+        // The node responding is self.local_node.id (UUID) and self.local_peer_id.
+        // The target for the response is msg.sender_peer_id.
+        let response_time_for_this_leg: u64 = 10; // Simulated processing time before responding
+
+        let mut network = self.network_manager.lock().await;
+        network.send_pulse_response(
+            self.local_node.id.to_string(), // Our Node UUID
+            &msg.sender_peer_id,            // Target PeerID for the response
+            &msg.pulse_id,
+            response_time_for_this_leg
+        ).await?;
+        log::debug!("Sent PulseResponse for pulse_id {} to PeerId {}", msg.pulse_id, msg.sender_peer_id);
+        Ok(())
+    }
+
+    async fn handle_pulse_response_message(&self, msg: PulseResponseMessage) -> Result<()> {
+        log::debug!("Received PulseResponseMessage from Node UUID {} (PeerId {}) for pulse_id {}: rt {}ms", msg.responder_node_uuid, msg.responder_peer_id, msg.pulse_id, msg.response_time_ms);
+
+        // Record this response time in UptimeMempool for the responder_node_uuid
+        let mut mempool = self.mempool.write().await;
+        mempool.record_received_pulse_response(
+            msg.responder_node_uuid.clone(),
+            msg.pulse_id.clone(),
+            msg.response_time_ms,
+            msg.timestamp,
+        )?;
+        Ok(())
+    }
+
+    async fn handle_transaction_gossip(&self, msg: TransactionGossipMessage) -> Result<()> {
+        log::info!("Received TransactionGossip for tx_id: {}", msg.tx_id);
+        // TODO: Add to mempool, potentially trigger workflow if this node is Charlie
+        // For now, just add to raw_tx_mempool if not already present
+        let mut mempool = self.mempool.write().await;
+        if mempool.raw_tx.get_transaction(&msg.tx_id).is_none() {
+            log::debug!("Adding gossiped transaction {} to mempool", msg.tx_id);
+            mempool.add_raw_transaction(msg.raw_transaction)?;
+            // Potentially, if this node is the designated leader (Charlie for this tx),
+            // it could start step2_charlie_processes_transaction or parts of it.
+            // This requires knowing the leader for a given tx.
+        } else {
+            log::debug!("Gossiped transaction {} already in mempool", msg.tx_id);
+        }
+        Ok(())
+    }
+
+    async fn handle_validation_task_message(&self, msg: ValidationTaskMessage) -> Result<()> {
+        log::info!("Received ValidationTaskMessage for task_id: {} targeted at {}", msg.task_id, msg.target_node);
+        // msg.target_node is expected to be this node's PeerId string or Node UUID string based on topic subscription.
+        // If this node is indeed the target (Alice), add to its pending tasks.
+        // This requires ValidationEngine to store tasks by Node ID.
+        // For now, let's assume if we receive it, it's for us.
+        let mut validation_engine = self.validation_engine.write().await;
+        if validation_engine.active_tasks.contains_key(&msg.task_id) || validation_engine.completed_tasks.contains_key(&msg.task_id) {
+            log::debug!("Validation task {} already known.", msg.task_id);
+            return Ok(());
+        }
+        log::debug!("Adding validation task {} to active_tasks for this node.", msg.task_id);
+        validation_engine.active_tasks.insert(msg.task_id.clone(), msg.task);
+        // TODO: Alice would then process this task and send a ValidationCompletionMessage
+        Ok(())
+    }
+
+    async fn handle_leader_election_message(&self, msg: LeaderElectionMessage) -> Result<()> {
+        log::info!("Received LeaderElectionMessage for election_id: {}, candidate: {}, votes: {}", msg.election_id, msg.candidate_id, msg.votes);
+        // TODO: Aggregate votes during leader election rounds.
+        // This requires LeaderElectionManager to store incoming votes.
+        let mut leader_election_manager = self.leader_election.write().await;
+        // Assuming msg.candidate_id is the Node UUID string
+        let vote_data = leader_election_manager.voting_data
+            .entry(msg.candidate_id.clone())
+            .or_insert_with(|| VotingData {
+                candidate_id: msg.candidate_id.clone(),
+                votes: 0,
+                performance_score: 0.0, // This would ideally be looked up or sent with vote
+                uptime_score: 0.0,    // This would ideally be looked up or sent with vote
+                round: msg.round,
+            });
+
+        // Simplistic: just add votes. Real voting needs rounds and more complex logic.
+        // Also, ensure votes are for the current round.
+        if vote_data.round == msg.round || leader_election_manager.election_round == 0 { // Allow first votes
+             if vote_data.round != msg.round { // New round for this candidate
+                vote_data.votes = 0;
+                vote_data.round = msg.round;
+            }
+            vote_data.votes += msg.votes;
+            log::debug!("Aggregated votes for {}: total {}, round {}", msg.candidate_id, vote_data.votes, msg.round);
+        } else {
+            log::warn!("Received vote for candidate {} for round {} but current/candidate round is different (LEM round {}, candidate data round {}). Ignoring.",
+                msg.candidate_id, msg.round, leader_election_manager.election_round, vote_data.round
+            );
+        }
+        Ok(())
+    }
+
+    async fn handle_uptime_data_message(&self, msg: UptimeMessage) -> Result<()> {
+        log::info!("Received UptimeDataMessage from node_id: {} ({}%)", msg.node_id, msg.uptime_percentage);
+        // TODO: Potentially update UptimeMempool if this data is considered authoritative
+        // For now, our UptimeMempool is based on direct observation of pulses/responses.
+        // This message type might be for nodes broadcasting their self-perceived status.
+        Ok(())
+    }
+
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -758,6 +1019,8 @@ impl Clone for ConsensusManager {
             network_manager: self.network_manager.clone(),
             storage_manager: self.storage_manager.clone(),
             local_node: self.local_node.clone(),
+            local_peer_id: self.local_peer_id.clone(),
+            local_node_keypair: self.local_node_keypair.clone(), // Added for signing
             leader_election: self.leader_election.clone(),
             pulse_system: self.pulse_system.clone(),
             transaction_processor: self.transaction_processor.clone(),
