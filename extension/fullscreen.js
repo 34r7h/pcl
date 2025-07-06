@@ -254,18 +254,18 @@ class XMBLDashboard {
         return false;
       }
       
-      // Check for transactions endpoint to see if simulator is generating activity
+      // Check for recent transactions to see if there's actual activity
       const txResponse = await fetch(`${this.nodeUrl}/transactions/recent`);
       
-      // If node is up but no recent transactions, simulator likely inactive
       if (txResponse.ok) {
         const txData = await txResponse.json();
         const hasRecentActivity = txData.transactions && txData.transactions.length > 0;
-        console.log('XMBL Dashboard: Recent transaction activity:', hasRecentActivity);
+        console.log('XMBL Dashboard: Recent transaction activity:', hasRecentActivity, `(${txData.transactions?.length || 0} transactions)`);
         return hasRecentActivity;
       }
       
       // Default to false if we can't determine activity
+      console.log('XMBL Dashboard: Could not check transaction activity');
       return false;
     } catch (error) {
       console.log('XMBL Dashboard: Simulator check failed:', error.message);
