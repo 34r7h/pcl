@@ -26,6 +26,9 @@ class XMBLDashboard {
     this.setupNavigation();
     this.setupEventListeners();
     
+    // Add address creation button to dashboard
+    this.addAddressCreationButton();
+    
     // Start real-time updates
     this.startMempoolMonitoring();
     this.startTestAddressGeneration();
@@ -36,6 +39,9 @@ class XMBLDashboard {
     // Set up periodic updates
     setInterval(() => this.updateNetworkStatus(), 5000);
     setInterval(() => this.loadWalletData(), 10000);
+    
+    // Sync with popup wallet state every 3 seconds
+    setInterval(() => this.syncWithPopupWallet(), 3000);
   }
 
   async loadWallet() {
@@ -761,6 +767,78 @@ class XMBLDashboard {
     if (sendToInput) {
       sendToInput.value = address;
       this.switchView('send');
+    }
+  }
+
+  addAddressCreationButton() {
+    const dashboardView = document.getElementById('dashboard-view');
+    if (dashboardView && !document.getElementById('create-address-dashboard-btn')) {
+      const createButton = document.createElement('button');
+      createButton.id = 'create-address-dashboard-btn';
+      createButton.textContent = 'Create New Address';
+      createButton.style.cssText = `
+        background: #4CAF50;
+        color: white;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 16px;
+        margin: 10px 0;
+        display: block;
+        width: 200px;
+      `;
+      
+      createButton.addEventListener('click', () => {
+        this.createWallet();
+      });
+      
+      // Insert after the wallet info section
+      const walletInfoSection = dashboardView.querySelector('.wallet-info');
+      if (walletInfoSection) {
+        walletInfoSection.appendChild(createButton);
+      } else {
+        dashboardView.appendChild(createButton);
+      }
+      
+      console.log('XMBL Dashboard: Address creation button added to dashboard');
+    }
+  }
+
+  async syncWithPopupWallet() {
+    try {
+      // Check if popup has created/updated wallet
+      if (typeof chrome !== 'undefined' && chrome.storage) {
+        chrome.storage.local.get(['xmblWallet'], (result) => {
+          if (result.xmblWallet) {
+            const storedWallet = result.xmblWallet;
+            
+            // Check if wallet has changed
+            if (!this.wallet || this.wallet.address !== storedWallet.address) {
+              console.log('XMBL Dashboard: Syncing with popup wallet');
+              this.wallet = storedWallet;
+              this.updateUI();
+              this.loadWalletData();
+            }
+          }
+        });
+      } else {
+        // Standalone context
+        const stored = localStorage.getItem('xmblWallet');
+        if (stored) {
+          const storedWallet = JSON.parse(stored);
+          
+          // Check if wallet has changed
+          if (!this.wallet || this.wallet.address !== storedWallet.address) {
+            console.log('XMBL Dashboard: Syncing with localStorage wallet');
+            this.wallet = storedWallet;
+            this.updateUI();
+            this.loadWalletData();
+          }
+        }
+      }
+    } catch (error) {
+      console.log('XMBL Dashboard: Error syncing with popup wallet:', error.message);
     }
   }
 }

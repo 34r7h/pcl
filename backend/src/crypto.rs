@@ -1,5 +1,5 @@
 use ed25519_dalek::{SigningKey, VerifyingKey, Signature, Signer, Verifier};
-use rand::rngs::OsRng;
+use rand::{rngs::OsRng, RngCore};
 use sha2::{Sha256, Digest};
 use serde::{Deserialize, Serialize};
 use std::net::IpAddr;
@@ -19,7 +19,9 @@ impl Default for NodeKeypair {
 impl NodeKeypair {
     pub fn new() -> Self {
         let mut csprng = OsRng;
-        let signing_key = SigningKey::generate(&mut csprng);
+        let mut secret_key = [0u8; 32];
+        rand::RngCore::fill_bytes(&mut csprng, &mut secret_key);
+        let signing_key = SigningKey::from_bytes(&secret_key);
         log::info!("Generated new node keypair with public key: {:?}", signing_key.verifying_key());
         Self { signing_key }
     }

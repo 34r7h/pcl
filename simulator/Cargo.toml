@@ -12,7 +12,7 @@ tokio = { version = "1.0", features = ["full"] }
 tokio-stream = "0.1"
 
 # CLI and configuration
-clap = { version = "4.0", features = ["derive"] }
+clap = { version = "4.3", features = ["derive"] }
 config = "0.14"
 
 # Logging and monitoring
@@ -23,15 +23,15 @@ tracing-subscriber = "0.3"
 
 # Randomization and simulation
 rand = "0.8"
-uuid = { version = "1.0", features = ["v4", "serde"] }
+uuid = { version = "1.0", features = ["v4"] }
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+hex = "0.4"
 
 # Time and scheduling
 chrono = { version = "0.4", features = ["serde"] }
-hex = "0.4"
 
 # Statistics and metrics
 prometheus = "0.13"

@@ -2,162 +2,238 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>XMBL Wallet</title>
   <style>
     body {
-      width: 360px;
-      height: 500px;
+      width: 350px;
+      min-height: 500px;
       margin: 0;
-      padding: 0;
+      padding: 16px;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       color: white;
     }
-    .container {
-      padding: 20px;
-      height: 100%;
-      box-sizing: border-box;
-    }
+
     .header {
       text-align: center;
       margin-bottom: 20px;
+      padding: 10px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.2);
     }
+
     .logo {
       font-size: 24px;
       font-weight: bold;
       margin-bottom: 5px;
     }
-    .network-status {
+
+    .status {
       font-size: 12px;
-      opacity: 0.8;
+      padding: 4px 8px;
+      border-radius: 12px;
+      display: inline-block;
+      margin-top: 5px;
     }
-    .wallet-section {
+
+    .status.connected {
+      background: rgba(76, 175, 80, 0.3);
+      color: #4CAF50;
+    }
+
+    .status.disconnected {
+      background: rgba(244, 67, 54, 0.3);
+      color: #f44336;
+    }
+
+    .section {
       background: rgba(255, 255, 255, 0.1);
-      border-radius: 10px;
-      padding: 15px;
-      margin-bottom: 15px;
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 16px;
+      backdrop-filter: blur(10px);
     }
-    .balance {
-      font-size: 28px;
-      font-weight: bold;
+
+    .wallet-info {
       text-align: center;
-      margin-bottom: 10px;
     }
+
     .address {
-      font-size: 12px;
-      text-align: center;
-      opacity: 0.7;
+      font-family: monospace;
+      font-size: 11px;
+      background: rgba(0, 0, 0, 0.2);
+      padding: 8px;
+      border-radius: 6px;
+      margin: 8px 0;
       word-break: break-all;
     }
-    .actions {
-      display: flex;
-      gap: 10px;
-      margin-bottom: 15px;
-    }
-    .btn {
-      flex: 1;
-      padding: 12px;
-      border: none;
-      border-radius: 8px;
-      font-size: 14px;
+
+    .balance {
+      font-size: 24px;
       font-weight: bold;
-      cursor: pointer;
-      transition: all 0.3s ease;
+      margin: 12px 0;
+      color: #FFD700;
     }
+
+    .input-group {
+      margin-bottom: 12px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 4px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    input {
+      width: 100%;
+      padding: 10px;
+      border: none;
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.9);
+      color: #333;
+      font-size: 14px;
+      box-sizing: border-box;
+    }
+
+    button {
+      width: 100%;
+      padding: 12px;
+      margin: 6px 0;
+      border: none;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
     .btn-primary {
       background: #4CAF50;
       color: white;
     }
+
+    .btn-primary:hover {
+      background: #45a049;
+      transform: translateY(-1px);
+    }
+
     .btn-secondary {
       background: rgba(255, 255, 255, 0.2);
       color: white;
+      border: 1px solid rgba(255, 255, 255, 0.3);
     }
-    .btn:hover {
-      transform: translateY(-2px);
+
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.3);
+      transform: translateY(-1px);
     }
-    .transactions {
-      max-height: 200px;
-      overflow-y: auto;
-    }
-    .transaction {
-      background: rgba(255, 255, 255, 0.1);
-      border-radius: 8px;
-      padding: 10px;
-      margin-bottom: 8px;
-      font-size: 12px;
-    }
-    .tx-hash {
-      opacity: 0.7;
-      word-break: break-all;
-    }
-    .fullscreen-btn {
-      position: absolute;
-      top: 10px;
-      right: 10px;
-      background: none;
-      border: none;
+
+    .btn-faucet {
+      background: #FF9800;
       color: white;
-      font-size: 18px;
-      cursor: pointer;
     }
-    .loading {
-      text-align: center;
-      padding: 20px;
+
+    .btn-faucet:hover {
+      background: #f57c00;
+      transform: translateY(-1px);
     }
+
+    .message {
+      padding: 8px;
+      border-radius: 6px;
+      margin: 8px 0;
+      font-size: 12px;
+      display: none;
+    }
+
     .error {
-      color: #ff6b6b;
+      background: rgba(244, 67, 54, 0.2);
+      border: 1px solid #f44336;
+      color: #ffcdd2;
+    }
+
+    .success {
+      background: rgba(76, 175, 80, 0.2);
+      border: 1px solid #4CAF50;
+      color: #c8e6c9;
+    }
+
+    .button-row {
+      display: flex;
+      gap: 8px;
+    }
+
+    .button-row button {
+      flex: 1;
+    }
+
+    .crypto-indicator {
+      font-size: 10px;
+      opacity: 0.8;
       text-align: center;
-      padding: 10px;
-      background: rgba(255, 0, 0, 0.1);
-      border-radius: 5px;
-      margin-bottom: 10px;
+      margin-top: 10px;
+      font-style: italic;
     }
   </style>
 </head>
 <body>
-  <div class="container">
-    <button class="fullscreen-btn" id="fullscreenBtn">⛶</button>
+  <div class="header">
+    <div class="logo">🔷 XMBL Wallet</div>
+    <div class="status" id="connectionStatus">Connecting...</div>
+    <div class="crypto-indicator">🔐 Real Cryptographic Signatures</div>
+  </div>
+
+  <!-- Create Wallet Section -->
+  <div id="createWalletSection" class="section" style="display: none;">
+    <h3>Create New Wallet</h3>
+    <p>Generate a new cryptographically secure XMBL wallet.</p>
+    <button id="createWalletBtn" class="btn-primary">🔐 Create Wallet</button>
+    <div class="crypto-indicator">Uses Web Crypto API for secure key generation</div>
+  </div>
+
+  <!-- Wallet Section -->
+  <div id="walletSection" class="section" style="display: none;">
+    <div class="wallet-info">
+      <div class="balance">
+        <span id="balance">0.0000</span> XMBL
+      </div>
+      <div class="address" id="address">No address</div>
+    </div>
+
+    <div class="button-row">
+      <button id="refreshBtn" class="btn-secondary">🔄 Refresh</button>
+      <button id="faucetBtn" class="btn-faucet">🚰 Faucet</button>
+    </div>
+
+    <!-- Send Transaction -->
+    <div class="input-group">
+      <label for="recipient">Recipient Address</label>
+      <input type="text" id="recipient" placeholder="Enter recipient address">
+    </div>
     
-    <div class="header">
-      <div class="logo">XMBL Wallet</div>
-      <div class="network-status" id="networkStatus">Connecting...</div>
+    <div class="input-group">
+      <label for="amount">Amount (XMBL)</label>
+      <input type="number" id="amount" step="0.0001" placeholder="0.0000">
     </div>
 
-    <div id="walletContent" class="loading">
-      <div>Loading wallet...</div>
+    <button id="sendBtn" class="btn-primary">💸 Send Transaction</button>
+
+    <button id="fullscreenBtn" class="btn-secondary">📱 Open Dashboard</button>
+  </div>
+
+  <!-- Messages -->
+  <div id="errorMessage" class="message error"></div>
+  <div id="successMessage" class="message success"></div>
+
+  <!-- Real Consensus Information -->
+  <div class="section">
+    <h4>🏛️ Real Consensus Protocol</h4>
+    <div style="font-size: 11px; opacity: 0.9;">
+      <div>✅ Ed25519 Signatures</div>
+      <div>✅ Real Transaction Validation</div>
+      <div>✅ XMBL Cubic DLT Integration</div>
+      <div>✅ Cross-Validation Network</div>
     </div>
-
-    <div id="noWallet" style="display: none;">
-      <div class="wallet-section">
-        <h3>Welcome to XMBL Wallet</h3>
-        <p>Create or import a wallet to get started</p>
-        <button class="btn btn-primary" id="createWalletBtn">Create Wallet</button>
-        <button class="btn btn-secondary" id="importWalletBtn">Import Wallet</button>
-      </div>
-    </div>
-
-    <div id="walletExists" style="display: none;">
-      <div class="wallet-section">
-        <div class="balance" id="balance">0.00 XMBL</div>
-        <div class="address" id="address">Loading...</div>
-      </div>
-
-      <div class="actions">
-        <button class="btn btn-primary" id="sendBtn">Send</button>
-        <button class="btn btn-secondary" id="receiveBtn">Receive</button>
-      </div>
-
-      <div class="wallet-section">
-        <h4>Recent Transactions</h4>
-        <div class="transactions" id="transactions">
-          <div class="transaction">
-            <div>No transactions yet</div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div id="errorMessage" class="error" style="display: none;"></div>
   </div>
 
   <script src="popup.js"></script>
