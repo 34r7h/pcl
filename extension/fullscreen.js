@@ -1,11 +1,20 @@
 // XMBL Wallet Fullscreen Dashboard
 class XMBLDashboard {
   constructor() {
-    this.wallet = null;
     this.nodeUrl = 'http://localhost:8080';
-    this.simulatorUrl = 'http://localhost:3000';
+    this.wallet = null;
     this.currentView = 'dashboard';
+    this.simulatorUrl = 'http://localhost:3000';
     this.mempoolUpdateInterval = null;
+    
+    // Bind methods to preserve 'this' context
+    this.getStoredWallet = this.getStoredWallet.bind(this);
+    this.loadWalletData = this.loadWalletData.bind(this);
+    this.createWallet = this.createWallet.bind(this);
+    this.updateMempoolData = this.updateMempoolData.bind(this);
+    this.displayMempoolActivity = this.displayMempoolActivity.bind(this);
+    
+    console.log('XMBL Dashboard: Initializing...');
     this.init();
   }
 
@@ -31,9 +40,8 @@ class XMBLDashboard {
 
   async loadWallet() {
     try {
-      const result = await chrome.storage.local.get(['xmblWallet']);
-      if (result.xmblWallet) {
-        this.wallet = result.xmblWallet;
+      this.wallet = this.getStoredWallet();
+      if (this.wallet) {
         console.log('XMBL Dashboard: Wallet loaded');
         await this.loadWalletData();
         this.updateUI();
@@ -45,6 +53,29 @@ class XMBLDashboard {
       console.error('XMBL Dashboard: Error loading wallet:', error.message || error);
       // Still show wallet creation even if there's an error
       this.showWalletCreation();
+    }
+  }
+
+  getStoredWallet() {
+    try {
+      if (typeof chrome !== 'undefined' && chrome.storage) {
+        // Chrome extension context
+        return new Promise((resolve) => {
+          chrome.storage.local.get(['xmblWallet'], (result) => {
+            console.log('XMBL Dashboard: Retrieved wallet from storage:', result.xmblWallet ? 'Found' : 'Not found');
+            resolve(result.xmblWallet || null);
+          });
+        });
+      } else {
+        // Standalone context
+        const stored = localStorage.getItem('xmblWallet');
+        const wallet = stored ? JSON.parse(stored) : null;
+        console.log('XMBL Dashboard: Retrieved wallet from localStorage:', wallet ? 'Found' : 'Not found');
+        return wallet;
+      }
+    } catch (error) {
+      console.log('XMBL Dashboard: Error accessing storage:', error.message);
+      return null;
     }
   }
 
@@ -67,31 +98,24 @@ class XMBLDashboard {
     try {
       console.log('XMBL Dashboard: Creating new wallet...');
       
-      // Generate wallet keypair (using simpler approach for Chrome extension)
-      const keyPair = await window.crypto.subtle.generateKey(
-        {
-          name: 'ECDSA',
-          namedCurve: 'P-256',
-        },
-        true,
-        ['sign', 'verify']
-      );
-
-      // Export the keys
-      const publicKey = await window.crypto.subtle.exportKey('raw', keyPair.publicKey);
-      const privateKey = await window.crypto.subtle.exportKey('pkcs8', keyPair.privateKey);
-
-      // Create wallet object
-      this.wallet = {
-        address: this.generateAddress(publicKey),
-        publicKey: Array.from(new Uint8Array(publicKey)),
-        privateKey: Array.from(new Uint8Array(privateKey)),
+      const address = this.generateAddress();
+      const privateKey = this.generatePrivateKey();
+      
+      const wallet = {
+        address: address,
+        privateKey: privateKey,
+        balance: 0,
         created: Date.now()
       };
-
-      // Save to storage
-      await chrome.storage.local.set({ xmblWallet: this.wallet });
       
+      // Store wallet
+      if (typeof chrome !== 'undefined' && chrome.storage) {
+        chrome.storage.local.set({ xmblWallet: wallet });
+      } else {
+        localStorage.setItem('xmblWallet', JSON.stringify(wallet));
+      }
+      
+      this.wallet = wallet;
       console.log('XMBL Dashboard: New wallet created successfully');
       this.updateUI();
       await this.loadWalletData();
@@ -101,39 +125,65 @@ class XMBLDashboard {
     }
   }
 
-  generateAddress(publicKey) {
+  generateAddress() {
     // Generate truly random address using crypto.getRandomValues
     const hash = new Uint8Array(20);
     crypto.getRandomValues(hash);
     
-    // Mix with public key for uniqueness
-    const pubKeyArray = new Uint8Array(publicKey);
+    // Add additional entropy from timestamp
+    const timestamp = Date.now();
     for (let i = 0; i < 20; i++) {
-      hash[i] ^= pubKeyArray[i % pubKeyArray.length];
+      hash[i] ^= ((timestamp >> (i % 32)) & 0xff);
     }
     
     return Array.from(hash).map(b => b.toString(16).padStart(2, '0')).join('');
   }
 
-  async loadWalletData() {
-    if (!this.wallet) return;
+  generatePrivateKey() {
+    // Generate cryptographically secure private key
+    const privateKey = new Uint8Array(32);
+    crypto.getRandomValues(privateKey);
+    return Array.from(privateKey).map(b => b.toString(16).padStart(2, '0')).join('');
+  }
 
+  async loadWalletData() {
+    let wallet = this.wallet;
+    
+    // If wallet is a promise, await it
+    if (wallet && typeof wallet.then === 'function') {
+      wallet = await wallet;
+    }
+    
+    // If still no wallet, try to get it directly
+    if (!wallet) {
+      wallet = await this.getStoredWallet();
+    }
+    
+    if (!wallet) return;
+    
     try {
-      // Load balance
-      const balanceResponse = await fetch(`${this.nodeUrl}/balance/${this.wallet.address}`);
+      // Load real balance
+      const balanceResponse = await fetch(`${this.nodeUrl}/balance/${wallet.address}`);
       if (balanceResponse.ok) {
         const balanceData = await balanceResponse.json();
-        this.updateBalance(balanceData.balance || 0);
+        const balanceElement = document.getElementById('fullscreen-balance');
+        if (balanceElement) {
+          balanceElement.textContent = `${balanceData.balance} XMBL`;
+        }
       }
-
-      // Load transactions
-      const txResponse = await fetch(`${this.nodeUrl}/transactions/${this.wallet.address}`);
-      if (txResponse.ok) {
-        const txData = await txResponse.json();
-        this.updateTransactions(txData.transactions || []);
+      
+      // Load real transactions from tx_mempool
+      const mempoolResponse = await fetch(`${this.nodeUrl}/mempools`);
+      if (mempoolResponse.ok) {
+        const mempoolData = await mempoolResponse.json();
+        
+        // Convert tx_mempool samples to transaction array
+        const transactions = Object.values(mempoolData.tx_mempool.samples || {});
+        this.updateTransactions(transactions);
       }
+      
     } catch (error) {
-      console.error('XMBL Dashboard: Error loading wallet data:', error);
+      console.log('XMBL Dashboard: Error loading wallet data:', error.message);
     }
   }
 
@@ -281,13 +331,6 @@ class XMBLDashboard {
     }
   }
 
-  updateBalance(balance) {
-    const balanceEl = document.getElementById('fullscreen-balance');
-    if (balanceEl) {
-      balanceEl.textContent = `${balance.toFixed(2)} XMBL`;
-    }
-  }
-
   updateUI() {
     if (this.wallet) {
       // Update address displays
@@ -325,7 +368,7 @@ class XMBLDashboard {
             <span class="validators">Validators: ${tx.validators ? tx.validators.join(', ') : 'unknown'}</span>
           </div>
           <div class="consensus-steps">
-            <h4>Consensus Steps Completed:</h4>
+            <h4>Consensus Steps:</h4>
             <ol class="step-list">
               ${tx.validation_steps ? tx.validation_steps.map(step => `<li class="step-completed">${step}</li>`).join('') : '<li>No steps recorded</li>'}
             </ol>
@@ -337,9 +380,6 @@ class XMBLDashboard {
         </div>
       </div>
     `).join('');
-
-    // Add to activity log
-    this.addActivityLogEntry(`Displayed ${transactions.length} transactions with consensus details`);
   }
 
   async handleSendTransaction() {
@@ -451,18 +491,15 @@ class XMBLDashboard {
 
       console.log('XMBL Dashboard: Requesting faucet funds for', this.wallet.address);
 
-      // Send faucet request to backend
-      const response = await fetch(`${this.nodeUrl}/transaction`, {
+      // Send faucet request to backend using new faucet endpoint
+      const response = await fetch(`${this.nodeUrl}/faucet`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          from: 'faucet_address_123456789',
-          to: this.wallet.address,
-          amount: 100.0,
-          timestamp: Date.now(),
-          type: 'faucet'
+          address: this.wallet.address,
+          amount: 100.0
         })
       });
 
@@ -537,47 +574,103 @@ class XMBLDashboard {
     }, 2000); // Update every 2 seconds
   }
 
+  // Real-time mempool monitoring - shows actual mempool objects
   async updateMempoolData() {
     try {
-      const response = await fetch(`${this.nodeUrl}/network`);
+      const response = await fetch(`${this.nodeUrl}/mempools`);
       if (response.ok) {
         const data = await response.json();
         
-        // Update mempool stats
+        // Update mempool stats with real counts
         const rawTxCount = document.getElementById('raw-tx-count');
         const processingTxCount = document.getElementById('processing-tx-count');
         const validationTaskCount = document.getElementById('validation-task-count');
         const lockedUtxoCount = document.getElementById('locked-utxo-count');
         
-        if (rawTxCount) rawTxCount.textContent = data.raw_transactions || 0;
-        if (processingTxCount) processingTxCount.textContent = data.processing_transactions || 0;
-        if (validationTaskCount) validationTaskCount.textContent = data.validation_tasks || 0;
-        if (lockedUtxoCount) lockedUtxoCount.textContent = data.locked_utxos || 0;
+        if (rawTxCount) rawTxCount.textContent = data.raw_tx_mempool.count;
+        if (processingTxCount) processingTxCount.textContent = data.processing_tx_mempool.count;
+        if (validationTaskCount) validationTaskCount.textContent = data.validation_tasks_mempool.count;
+        if (lockedUtxoCount) lockedUtxoCount.textContent = data.locked_utxo_mempool.count;
         
-        // Add activity log entry
-        this.addActivityLogEntry(`Mempool update: ${data.finalized_transactions} total transactions, ${data.validation_tasks} active tasks`);
+        // Display actual mempool objects in activity log
+        this.displayMempoolActivity(data);
+        
       }
     } catch (error) {
       console.log('XMBL Dashboard: Mempool update failed:', error.message);
     }
   }
 
-  addActivityLogEntry(message) {
+  displayMempoolActivity(mempoolData) {
     const activityLog = document.getElementById('activity-log');
-    if (activityLog) {
-      const timestamp = new Date().toLocaleTimeString();
-      const entry = document.createElement('div');
-      entry.className = 'activity-entry';
-      entry.innerHTML = `<span class="timestamp">[${timestamp}]</span> ${message}`;
-      
-      // Add to top
-      activityLog.insertBefore(entry, activityLog.firstChild);
-      
-      // Keep only last 20 entries
-      while (activityLog.children.length > 20) {
-        activityLog.removeChild(activityLog.lastChild);
+    if (!activityLog) return;
+    
+    // Clear loading message
+    activityLog.innerHTML = '';
+    
+    // Display all 5 mempools as described in README
+    const mempoolOrder = [
+      {
+        key: 'raw_tx_mempool',
+        title: 'Raw Transaction Mempool',
+        description: 'First entries of tx requests',
+        data: mempoolData.raw_tx_mempool
+      },
+      {
+        key: 'validation_tasks_mempool',
+        title: 'Validation Tasks Mempool',
+        description: 'Validation tasks required to process transactions',
+        data: mempoolData.validation_tasks_mempool
+      },
+      {
+        key: 'locked_utxo_mempool',
+        title: 'Locked UTXO Mempool',
+        description: 'UTXOs invalidated from entry into raw_tx_mempool',
+        data: mempoolData.locked_utxo_mempool
+      },
+      {
+        key: 'processing_tx_mempool',
+        title: 'Processing Transaction Mempool',
+        description: 'Transactions moving through consensus',
+        data: mempoolData.processing_tx_mempool
+      },
+      {
+        key: 'tx_mempool',
+        title: 'Transaction Mempool',
+        description: 'Transactions approved to be blocked or finalized',
+        data: mempoolData.tx_mempool
       }
-    }
+    ];
+    
+    mempoolOrder.forEach(mempool => {
+      const section = document.createElement('div');
+      section.className = 'mempool-section';
+      
+      const count = mempool.data.count || 0;
+      const samples = mempool.data.samples || mempool.data.utxos || mempool.data;
+      
+      section.innerHTML = `
+        <div class="mempool-header">
+          <h4 class="mempool-title">${mempool.title}</h4>
+          <span class="mempool-count">${count} items</span>
+        </div>
+        <div class="mempool-description">${mempool.description}</div>
+        <div class="mempool-content">
+          ${count > 0 
+            ? `<pre class="mempool-data">${JSON.stringify(samples, null, 2)}</pre>`
+            : '<div class="mempool-empty">No items in this mempool</div>'
+          }
+        </div>
+      `;
+      
+      activityLog.appendChild(section);
+    });
+    
+    // Add timestamp
+    const timestamp = document.createElement('div');
+    timestamp.className = 'mempool-timestamp';
+    timestamp.textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
+    activityLog.appendChild(timestamp);
   }
 
   // New: Dynamic test address generation from simulator
@@ -589,33 +682,53 @@ class XMBLDashboard {
 
   async generateLiveTestAddresses() {
     try {
-      // Generate 3 dynamic test addresses from the consensus network
-      const addresses = [];
-      for (let i = 0; i < 3; i++) {
-        const address = this.generateSimulatorAddress(i);
+      // Get real addresses from actual mempool transactions
+      const mempoolResponse = await fetch(`${this.nodeUrl}/mempools`);
+      if (mempoolResponse.ok) {
+        const mempoolData = await mempoolResponse.json();
+        
+        // Extract addresses from validation tasks and transactions
+        const addresses = [];
+        let addressIndex = 0;
+        
+        // Add faucet address as first test address
         addresses.push({
-          name: ['Alice', 'Bob', 'Charlie'][i],
-          address: address,
-          balance: Math.floor(Math.random() * 500) + 50 // Random balance 50-550 XMBL
+          name: 'Faucet',
+          address: 'faucet_address_123456789',
+          balance: 1000000
         });
+        
+        // Extract addresses from finalized transactions
+        Object.values(mempoolData.tx_mempool.samples || {}).forEach(tx => {
+          if (tx.to && !addresses.find(a => a.address === tx.to)) {
+            const names = ['Alice', 'Bob', 'Charlie', 'Diana', 'Eve'];
+            addresses.push({
+              name: names[addressIndex % names.length],
+              address: tx.to,
+              balance: 0 // Will be updated by balance endpoint
+            });
+            addressIndex++;
+          }
+        });
+        
+        // Fill remaining with generated addresses if needed
+        while (addresses.length < 4) {
+          const names = ['Alice', 'Bob', 'Charlie', 'Diana', 'Eve'];
+          const name = names[addressIndex % names.length];
+          addresses.push({
+            name: name,
+            address: `test_user_${name.toLowerCase()}_${Date.now()}`,
+            balance: Math.floor(Math.random() * 100)
+          });
+          addressIndex++;
+        }
+        
+        this.updateLiveTestAddresses(addresses.slice(0, 4));
       }
-      
-      this.updateLiveTestAddresses(addresses);
-      
-      // Add to activity log
-      this.addActivityLogEntry(`Generated ${addresses.length} new test addresses from simulator`);
       
     } catch (error) {
       console.log('XMBL Dashboard: Failed to generate test addresses:', error.message);
     }
-  }
-
-  generateSimulatorAddress(index) {
-    // Generate realistic addresses that look like they come from the simulator
-    const prefixes = ['sim_alice_', 'sim_bob_', 'sim_charlie_'];
-    const timestamp = Date.now().toString().slice(-8);
-    const random = Math.random().toString(36).substring(2, 8);
-    return prefixes[index] + timestamp + random;
   }
 
   updateLiveTestAddresses(addresses) {
@@ -648,7 +761,6 @@ class XMBLDashboard {
     if (sendToInput) {
       sendToInput.value = address;
       this.switchView('send');
-      this.addActivityLogEntry(`Copied address to send form: ${address.substring(0, 20)}...`);
     }
   }
 }
