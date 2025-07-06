@@ -148,6 +148,18 @@ class XMBLDashboard {
         this.handleSendTransaction();
       });
     }
+
+    // Faucet button
+    const faucetBtn = document.getElementById('faucet-btn');
+    if (faucetBtn) {
+      faucetBtn.addEventListener('click', () => this.requestFaucet());
+    }
+
+    // Test address copying
+    const testAddresses = document.querySelectorAll('.test-address');
+    testAddresses.forEach(address => {
+      address.addEventListener('click', () => this.copyTestAddress(address));
+    });
   }
 
   switchView(view) {
@@ -167,13 +179,23 @@ class XMBLDashboard {
   }
 
   async updateNetworkStatus() {
+    console.log('XMBL Dashboard: Checking network status...');
+    
     try {
-      // Check node
-      const nodeResponse = await fetch(`${this.nodeUrl}/health`);
+      // Check node with timeout
+      const nodeResponse = await Promise.race([
+        fetch(`${this.nodeUrl}/health`),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 2000))
+      ]);
       const nodeConnected = nodeResponse.ok;
+      console.log('XMBL Dashboard: Node status:', nodeConnected ? 'ONLINE' : 'OFFLINE');
 
-      // Check if simulator is conceptually running (check for recent activity)
-      const simulatorActive = await this.checkSimulatorActivity();
+      // Check simulator activity with timeout
+      const simulatorActive = await Promise.race([
+        this.checkSimulatorActivity(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 2000))
+      ]);
+      console.log('XMBL Dashboard: Simulator status:', simulatorActive ? 'ACTIVE' : 'INACTIVE');
 
       // Update UI
       const networkStatus = document.getElementById('networkStatus');
@@ -201,28 +223,52 @@ class XMBLDashboard {
 
     } catch (error) {
       console.error('XMBL Dashboard: Network status check failed:', error);
+      
+      // Mark everything as offline on error
       const networkStatus = document.getElementById('networkStatus');
       const networkText = document.getElementById('networkText');
+      const nodeStatus = document.getElementById('node-status');
+      const simulatorStatus = document.getElementById('simulator-status');
       
       if (networkStatus) networkStatus.classList.remove('connected');
       if (networkText) networkText.textContent = 'Offline';
+      
+      if (nodeStatus) {
+        nodeStatus.textContent = '○';
+        nodeStatus.style.color = '#ff6b6b';
+      }
+      
+      if (simulatorStatus) {
+        simulatorStatus.textContent = '○';
+        simulatorStatus.style.color = '#ff6b6b';
+      }
     }
   }
 
   async checkSimulatorActivity() {
     try {
-      // Since simulator is CLI tool, we'll check if there's recent transaction activity
-      // as a proxy for simulator being active
-      const response = await fetch(`${this.nodeUrl}/health`);
-      if (!response.ok) return false;
+      // Check if node is responding first
+      const nodeResponse = await fetch(`${this.nodeUrl}/health`);
+      if (!nodeResponse.ok) {
+        console.log('XMBL Dashboard: Node down, simulator inactive');
+        return false;
+      }
       
-      // Check for recent transactions as indicator of simulator activity
+      // Check for transactions endpoint to see if simulator is generating activity
       const txResponse = await fetch(`${this.nodeUrl}/transactions/recent`);
       
-      // If we get any response, assume simulator might be active
-      // In reality, this would check for recent blockchain activity
-      return true;
+      // If node is up but no recent transactions, simulator likely inactive
+      if (txResponse.ok) {
+        const txData = await txResponse.json();
+        const hasRecentActivity = txData.transactions && txData.transactions.length > 0;
+        console.log('XMBL Dashboard: Recent transaction activity:', hasRecentActivity);
+        return hasRecentActivity;
+      }
+      
+      // Default to false if we can't determine activity
+      return false;
     } catch (error) {
+      console.log('XMBL Dashboard: Simulator check failed:', error.message);
       return false;
     }
   }
@@ -299,10 +345,10 @@ class XMBLDashboard {
 
     try {
       // Show validation workflow
-      showValidationWorkflow();
+      this.showValidationWorkflow();
       
       // Step 1: Alice creates transaction
-      updateValidationStep(1, 'active');
+      this.updateValidationStep(1, 'active');
       await new Promise(resolve => setTimeout(resolve, 1000));
       
       const transaction = {
@@ -313,30 +359,30 @@ class XMBLDashboard {
         nonce: Math.floor(Math.random() * 1000000)
       };
 
-      updateValidationStep(1, 'completed');
+      this.updateValidationStep(1, 'completed');
       
       // Step 2: Charlie processes and gossips
-      updateValidationStep(2, 'active');
+      this.updateValidationStep(2, 'active');
       await new Promise(resolve => setTimeout(resolve, 1500));
-      updateValidationStep(2, 'completed');
+      this.updateValidationStep(2, 'completed');
       
       // Step 3: Leaders assign validation tasks
-      updateValidationStep(3, 'active');
+      this.updateValidationStep(3, 'active');
       await new Promise(resolve => setTimeout(resolve, 1000));
-      updateValidationStep(3, 'completed');
+      this.updateValidationStep(3, 'completed');
       
       // Step 4: Alice completes validation tasks
-      updateValidationStep(4, 'active');
+      this.updateValidationStep(4, 'active');
       await new Promise(resolve => setTimeout(resolve, 2000));
-      updateValidationStep(4, 'completed');
+      this.updateValidationStep(4, 'completed');
       
       // Step 5: Charlie processes validation results
-      updateValidationStep(5, 'active');
+      this.updateValidationStep(5, 'active');
       await new Promise(resolve => setTimeout(resolve, 1000));
-      updateValidationStep(5, 'completed');
+      this.updateValidationStep(5, 'completed');
       
       // Step 6: Validator broadcasts and finalizes
-      updateValidationStep(6, 'active');
+      this.updateValidationStep(6, 'active');
       
       // Send transaction
       const response = await fetch(`${this.nodeUrl}/transaction`, {
@@ -348,12 +394,12 @@ class XMBLDashboard {
       });
 
       if (response.ok) {
-        updateValidationStep(6, 'completed');
+        this.updateValidationStep(6, 'completed');
         alert('Transaction sent successfully!');
         this.clearSendForm();
         await this.loadWalletData();
       } else {
-        updateValidationStep(6, 'failed');
+        this.updateValidationStep(6, 'failed');
         throw new Error('Transaction failed');
       }
     } catch (error) {
@@ -365,10 +411,109 @@ class XMBLDashboard {
         const stepEl = document.getElementById(`step-${i}`);
         const numberEl = stepEl.querySelector('.step-number');
         if (numberEl.classList.contains('active')) {
-          updateValidationStep(i, 'failed');
+          this.updateValidationStep(i, 'failed');
           break;
         }
       }
+    }
+  }
+
+  clearSendForm() {
+    const sendTo = document.getElementById('send-to');
+    const sendAmount = document.getElementById('send-amount');
+    if (sendTo) sendTo.value = '';
+    if (sendAmount) sendAmount.value = '';
+  }
+
+  async requestFaucet() {
+    try {
+      if (!this.wallet) {
+        alert('Please create a wallet first');
+        return;
+      }
+
+      const faucetBtn = document.getElementById('faucet-btn');
+      faucetBtn.disabled = true;
+      faucetBtn.textContent = '⏳ Requesting...';
+
+      console.log('XMBL Dashboard: Requesting faucet funds for', this.wallet.address);
+
+      // Send faucet request to backend
+      const response = await fetch(`${this.nodeUrl}/transaction`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          from: 'faucet_address_123456789',
+          to: this.wallet.address,
+          amount: 100.0,
+          timestamp: Date.now(),
+          type: 'faucet'
+        })
+      });
+
+      if (response.ok) {
+        alert('🎉 100 XMBL added to your wallet!');
+        // Reload wallet data
+        await this.loadWalletData();
+      } else {
+        throw new Error('Faucet request failed');
+      }
+    } catch (error) {
+      console.error('XMBL Dashboard: Faucet error:', error);
+      alert('Faucet request failed: ' + error.message);
+    } finally {
+      const faucetBtn = document.getElementById('faucet-btn');
+      faucetBtn.disabled = false;
+      faucetBtn.textContent = '🚰 Get Test Funds';
+    }
+  }
+
+  copyTestAddress(element) {
+    const address = element.dataset.address;
+    navigator.clipboard.writeText(address);
+    
+    console.log('XMBL Dashboard: Copied address:', address);
+    
+    // Visual feedback
+    const originalText = element.textContent;
+    element.style.background = '#4CAF50';
+    element.textContent = '✓ Copied!';
+    
+    setTimeout(() => {
+      element.style.background = 'rgba(255, 255, 255, 0.1)';
+      element.textContent = originalText;
+    }, 1000);
+  }
+
+  showValidationWorkflow() {
+    const workflowEl = document.getElementById('validation-workflow');
+    if (workflowEl) {
+      workflowEl.style.display = 'block';
+      console.log('XMBL Dashboard: Showing validation workflow');
+    }
+  }
+
+  updateValidationStep(stepNumber, status) {
+    const stepEl = document.getElementById(`step-${stepNumber}`);
+    const statusEl = document.getElementById(`status-${stepNumber}`);
+    
+    if (!stepEl || !statusEl) return;
+    
+    const numberEl = stepEl.querySelector('.step-number');
+    
+    console.log(`XMBL Dashboard: Validation step ${stepNumber} - ${status}`);
+    
+    if (status === 'active') {
+      numberEl.className = 'step-number active';
+      statusEl.textContent = '🔄';
+    } else if (status === 'completed') {
+      numberEl.className = 'step-number completed';
+      statusEl.textContent = '✅';
+    } else if (status === 'failed') {
+      numberEl.className = 'step-number';
+      statusEl.textContent = '❌';
     }
   }
 }
