@@ -363,21 +363,23 @@ class XMBLDashboard {
     }
 
     container.innerHTML = transactions.map(tx => `
-      <div class="transaction-item">
+      <div class="transaction-item clickable" onclick="showConsensusSteps('${tx.hash}')">
         <div class="tx-header">
           <div class="tx-hash">${tx.hash}</div>
           <div class="tx-amount">${tx.amount} XMBL</div>
+          <div class="tx-action">
+            <button class="btn-consensus-small">View Details</button>
+          </div>
         </div>
         <div class="tx-details">
           <div class="tx-participants">
-            <span class="leader">Leader: ${tx.leader_id || 'unknown'}</span>
-            <span class="validators">Validators: ${tx.validators ? tx.validators.join(', ') : 'unknown'}</span>
+            <span class="leader">Leader: ${tx.leader_id || 'Pending'}</span>
+            <span class="validators">Validators: ${tx.validators ? tx.validators.length : 0}</span>
           </div>
-          <div class="consensus-steps">
-            <h4>Consensus Steps:</h4>
-            <ol class="step-list">
-              ${tx.validation_steps ? tx.validation_steps.map(step => `<li class="step-completed">${step}</li>`).join('') : '<li>No steps recorded</li>'}
-            </ol>
+          <div class="tx-quick-steps">
+            <div class="quick-step ${tx.status === 'finalized' ? 'completed' : 'pending'}">Received</div>
+            <div class="quick-step ${tx.status === 'finalized' ? 'completed' : 'pending'}">Validated</div>
+            <div class="quick-step ${tx.status === 'finalized' ? 'completed' : 'pending'}">Finalized</div>
           </div>
           <div class="tx-meta">
             <span class="tx-time">${new Date(tx.timestamp).toLocaleString()}</span>
@@ -614,7 +616,7 @@ class XMBLDashboard {
     // Clear loading message
     activityLog.innerHTML = '';
     
-    // Display all 5 mempools as described in README
+    // Display all 5 mempools as formatted tables
     const mempoolOrder = [
       {
         key: 'raw_tx_mempool',
@@ -663,7 +665,7 @@ class XMBLDashboard {
         <div class="mempool-description">${mempool.description}</div>
         <div class="mempool-content">
           ${count > 0 
-            ? `<pre class="mempool-data">${JSON.stringify(samples, null, 2)}</pre>`
+            ? this.formatMempoolData(mempool.key, samples)
             : '<div class="mempool-empty">No items in this mempool</div>'
           }
         </div>
@@ -677,6 +679,183 @@ class XMBLDashboard {
     timestamp.className = 'mempool-timestamp';
     timestamp.textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
     activityLog.appendChild(timestamp);
+  }
+
+  formatMempoolData(mempoolType, samples) {
+    if (!samples || Object.keys(samples).length === 0) {
+      return '<div class="mempool-empty">No items in this mempool</div>';
+    }
+
+    switch (mempoolType) {
+      case 'raw_tx_mempool':
+        return this.formatRawTransactions(samples);
+      case 'validation_tasks_mempool':
+        return this.formatValidationTasks(samples);
+      case 'locked_utxo_mempool':
+        return this.formatLockedUTXOs(samples);
+      case 'processing_tx_mempool':
+        return this.formatProcessingTransactions(samples);
+      case 'tx_mempool':
+        return this.formatFinalizedTransactions(samples);
+      default:
+        return `<pre class="mempool-data">${JSON.stringify(samples, null, 2)}</pre>`;
+    }
+  }
+
+  formatRawTransactions(samples) {
+    const entries = Object.entries(samples);
+    if (entries.length === 0) return '<div class="mempool-empty">No raw transactions</div>';
+    
+    return `
+      <table class="mempool-table">
+        <thead>
+          <tr>
+            <th>TX Hash</th>
+            <th>From</th>
+            <th>To</th>
+            <th>Amount</th>
+            <th>Leader</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${entries.map(([txId, tx]) => `
+            <tr>
+              <td class="tx-hash">${txId.substring(0, 8)}...</td>
+              <td class="address">${tx.from?.substring(0, 8)}...</td>
+              <td class="address">${tx.to?.substring(0, 8)}...</td>
+              <td class="amount">${tx.amount} XMBL</td>
+              <td class="leader">${tx.leader_id || 'Pending'}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+  }
+
+  formatValidationTasks(samples) {
+    const allTasks = [];
+    Object.entries(samples).forEach(([leaderId, tasks]) => {
+      tasks.forEach(task => {
+        allTasks.push({...task, leader: leaderId});
+      });
+    });
+    
+    if (allTasks.length === 0) return '<div class="mempool-empty">No validation tasks</div>';
+    
+    return `
+      <table class="mempool-table">
+        <thead>
+          <tr>
+            <th>Task ID</th>
+            <th>Type</th>
+            <th>Validator</th>
+            <th>Status</th>
+            <th>Leader</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${allTasks.map(task => `
+            <tr>
+              <td class="task-id">${task.task_id}</td>
+              <td class="task-type">${task.task_type}</td>
+              <td class="address">${task.assigned_validator?.substring(0, 8)}...</td>
+              <td class="status ${task.complete ? 'complete' : 'pending'}">${task.complete ? 'Complete' : 'Pending'}</td>
+              <td class="leader">${task.leader}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+  }
+
+  formatLockedUTXOs(samples) {
+    const utxos = samples.utxos || samples;
+    if (!utxos || Object.keys(utxos).length === 0) return '<div class="mempool-empty">No locked UTXOs</div>';
+    
+    return `
+      <table class="mempool-table">
+        <thead>
+          <tr>
+            <th>UTXO ID</th>
+            <th>Owner</th>
+            <th>Amount</th>
+            <th>Lock Reason</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${Object.entries(utxos).map(([utxoId, utxo]) => `
+            <tr>
+              <td class="utxo-id">${utxoId.substring(0, 12)}...</td>
+              <td class="address">${utxo.owner?.substring(0, 8)}...</td>
+              <td class="amount">${utxo.amount} XMBL</td>
+              <td class="lock-reason">Transaction Processing</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+  }
+
+  formatProcessingTransactions(samples) {
+    const entries = Object.entries(samples);
+    if (entries.length === 0) return '<div class="mempool-empty">No processing transactions</div>';
+    
+    return `
+      <table class="mempool-table">
+        <thead>
+          <tr>
+            <th>TX Hash</th>
+            <th>From</th>
+            <th>To</th>
+            <th>Amount</th>
+            <th>Progress</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${entries.map(([txId, tx]) => `
+            <tr>
+              <td class="tx-hash">${txId.substring(0, 8)}...</td>
+              <td class="address">${tx.from?.substring(0, 8)}...</td>
+              <td class="address">${tx.to?.substring(0, 8)}...</td>
+              <td class="amount">${tx.amount} XMBL</td>
+              <td class="progress">Validating</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+  }
+
+  formatFinalizedTransactions(samples) {
+    const entries = Object.entries(samples);
+    if (entries.length === 0) return '<div class="mempool-empty">No finalized transactions</div>';
+    
+    return `
+      <table class="mempool-table">
+        <thead>
+          <tr>
+            <th>TX Hash</th>
+            <th>From</th>
+            <th>To</th>
+            <th>Amount</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${entries.map(([txId, tx]) => `
+            <tr>
+              <td class="tx-hash">${txId.substring(0, 8)}...</td>
+              <td class="address">${tx.from?.substring(0, 8)}...</td>
+              <td class="address">${tx.to?.substring(0, 8)}...</td>
+              <td class="amount">${tx.amount} XMBL</td>
+              <td class="status finalized">Finalized</td>
+              <td><button class="btn-consensus" onclick="showConsensusSteps('${txId}')">View Consensus</button></td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
   }
 
   // New: Dynamic test address generation from simulator
@@ -841,12 +1020,114 @@ class XMBLDashboard {
       console.log('XMBL Dashboard: Error syncing with popup wallet:', error.message);
     }
   }
+
+  // Add consensus steps display functionality
+  showConsensusSteps(txId) {
+    // Get transaction details from mempool
+    fetch(`${this.nodeUrl}/mempools`)
+      .then(response => response.json())
+      .then(data => {
+        const tx = data.tx_mempool.samples[txId];
+        if (tx) {
+          this.displayConsensusModal(tx);
+        }
+      })
+      .catch(error => {
+        console.log('Error fetching transaction details:', error);
+      });
+  }
+
+  displayConsensusModal(tx) {
+    const modal = document.createElement('div');
+    modal.className = 'consensus-modal';
+    modal.innerHTML = `
+      <div class="consensus-modal-content">
+        <div class="consensus-header">
+          <h3>Consensus Protocol Steps</h3>
+          <button class="close-btn" onclick="this.parentElement.parentElement.parentElement.remove()">×</button>
+        </div>
+        <div class="consensus-body">
+          <div class="tx-details">
+            <h4>Transaction Details</h4>
+            <div class="tx-info">
+              <div><strong>Hash:</strong> ${tx.hash}</div>
+              <div><strong>From:</strong> ${tx.from}</div>
+              <div><strong>To:</strong> ${tx.to}</div>
+              <div><strong>Amount:</strong> ${tx.amount} XMBL</div>
+              <div><strong>Leader:</strong> ${tx.leader_id}</div>
+              <div><strong>Status:</strong> ${tx.status}</div>
+            </div>
+          </div>
+          <div class="consensus-steps">
+            <h4>Consensus Steps</h4>
+            <div class="step-list">
+              ${tx.validation_steps ? tx.validation_steps.map((step, index) => `
+                <div class="step-item ${step.completed ? 'completed' : 'pending'}">
+                  <div class="step-number">${index + 1}</div>
+                  <div class="step-content">
+                    <div class="step-title">${step.title}</div>
+                    <div class="step-description">${step.description}</div>
+                    <div class="step-timestamp">${new Date(step.timestamp).toLocaleString()}</div>
+                  </div>
+                </div>
+              `).join('') : this.generateConsensusSteps(tx)}
+            </div>
+          </div>
+          <div class="validators-info">
+            <h4>Validators</h4>
+            <div class="validator-list">
+              ${tx.validators ? tx.validators.map(validator => `
+                <div class="validator-item">
+                  <div class="validator-address">${validator}</div>
+                  <div class="validator-status">✅ Validated</div>
+                </div>
+              `).join('') : '<div>No validators listed</div>'}
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+    
+    document.body.appendChild(modal);
+  }
+
+  generateConsensusSteps(tx) {
+    // Generate standard consensus steps based on transaction data
+    const steps = [
+      { title: 'Transaction Received', description: 'Raw transaction entered mempool', completed: true },
+      { title: 'Leader Assignment', description: `Leader ${tx.leader_id} assigned to process transaction`, completed: true },
+      { title: 'Validation Tasks Created', description: 'Cross-validation tasks distributed to validators', completed: true },
+      { title: 'Consensus Validation', description: 'Validators completed assigned validation tasks', completed: true },
+      { title: 'Transaction Processed', description: 'Transaction moved to processing mempool', completed: true },
+      { title: 'Finalization', description: 'Transaction finalized and added to tx_mempool', completed: true }
+    ];
+
+    return steps.map((step, index) => `
+      <div class="step-item ${step.completed ? 'completed' : 'pending'}">
+        <div class="step-number">${index + 1}</div>
+        <div class="step-content">
+          <div class="step-title">${step.title}</div>
+          <div class="step-description">${step.description}</div>
+          <div class="step-timestamp">${new Date().toLocaleString()}</div>
+        </div>
+      </div>
+    `).join('');
+  }
 }
 
 // Global functions for HTML onclick handlers
 window.clearSendForm = function() {
   document.getElementById('send-to').value = '';
   document.getElementById('send-amount').value = '';
+};
+
+// Make showConsensusSteps globally accessible
+window.showConsensusSteps = function(txId) {
+  // Get the dashboard instance
+  const dashboard = window.dashboardInstance;
+  if (dashboard) {
+    dashboard.showConsensusSteps(txId);
+  }
 };
 
 window.copyAddress = function() {
@@ -974,7 +1255,7 @@ window.exportWallet = function() {
 
 // Initialize dashboard when page loads
 document.addEventListener('DOMContentLoaded', () => {
-  new XMBLDashboard();
+  window.dashboardInstance = new XMBLDashboard();
 });
 
 console.log('XMBL Dashboard: Script loaded successfully');

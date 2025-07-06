@@ -20,8 +20,12 @@ class XMBLWallet {
     if (stored) {
       this.wallet = stored;
       console.log('✅ WALLET LOADED: Restored existing wallet from storage');
-      this.updateUI();
+    } else {
+      console.log('📱 NO WALLET FOUND: Will show create wallet interface');
     }
+    
+    // Always update UI to show appropriate sections
+    this.updateUI();
     
     // Start health monitoring
     this.startHealthMonitoring();
@@ -38,8 +42,8 @@ class XMBLWallet {
     try {
       // REAL IMPLEMENTATION: Generate cryptographically secure address
       const seed = this.generateSecureSeed();
-      const address = this.generateAddressFromSeed(seed);
-      const publicKey = this.generatePublicKeyFromSeed(seed);
+      const address = await this.generateAddressFromSeed(seed);
+      const publicKey = await this.generatePublicKeyFromSeed(seed);
       
       this.wallet = {
         address: address,
