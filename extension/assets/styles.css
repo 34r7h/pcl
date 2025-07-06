@@ -1,35 +1,77 @@
-/* Mempool section styles */
+/* Mempool section styles - Enhanced */
 .mempool-section {
-  margin: 20px 0;
-  border: 1px solid #333;
-  border-radius: 8px;
-  background: #1a1a1a;
+  margin: 25px 0;
+  border: 2px solid #333;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%);
   padding: 0;
   overflow: hidden;
+  box-shadow: 0 4px 16px rgba(0, 255, 136, 0.1);
+  transition: all 0.3s ease;
+}
+
+.mempool-section:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 24px rgba(0, 255, 136, 0.2);
+  border-color: #00ff88;
 }
 
 .mempool-header {
-  background: #2a2a2a;
-  padding: 10px 15px;
+  background: linear-gradient(135deg, #00ff88 0%, #00cc6a 100%);
+  color: #000;
+  padding: 15px 20px;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border-bottom: 1px solid #333;
+  border-bottom: none;
+  position: relative;
+  overflow: hidden;
+}
+
+.mempool-header::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(45deg, transparent 30%, rgba(255, 255, 255, 0.1) 50%, transparent 70%);
+  animation: shimmer 3s infinite;
+}
+
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
 }
 
 .mempool-title {
-  color: #00ff88;
-  font-size: 14px;
-  font-weight: bold;
+  color: #000;
+  font-size: 16px;
+  font-weight: 800;
   margin: 0;
+  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.3);
+  position: relative;
+  z-index: 1;
 }
 
 .mempool-count {
-  color: #888;
-  font-size: 12px;
-  background: #333;
-  padding: 2px 8px;
-  border-radius: 4px;
+  color: #000;
+  font-size: 14px;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-weight: 700;
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mempool-count::before {
+  content: '●';
+  animation: pulse 2s infinite;
+  color: #000;
 }
 
 .mempool-description {
@@ -520,4 +562,269 @@
   color: #00ff88;
 }
 
-/* Existing styles... */ 
+/* Enhanced transaction table styling */
+.transactions-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #1a1a1a;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 4px 16px rgba(0, 255, 136, 0.1);
+  margin-top: 10px;
+}
+
+.transactions-table th {
+  background: linear-gradient(135deg, #00ff88 0%, #00cc6a 100%);
+  color: #000;
+  padding: 12px 16px;
+  text-align: left;
+  font-weight: 800;
+  text-transform: uppercase;
+  font-size: 12px;
+  letter-spacing: 0.5px;
+  border: none;
+}
+
+.transactions-table td {
+  padding: 12px 16px;
+  border-bottom: 1px solid #333;
+  color: #ccc;
+  border-left: none;
+  border-right: none;
+}
+
+.transaction-row {
+  transition: all 0.3s ease;
+  border-bottom: 1px solid #333;
+}
+
+.transaction-row:hover {
+  background: linear-gradient(135deg, #2a2a2a 0%, #3a3a3a 100%);
+  transform: translateX(4px);
+  box-shadow: 0 2px 8px rgba(0, 255, 136, 0.2);
+}
+
+.transaction-row.clickable {
+  cursor: pointer;
+}
+
+.transaction-row .tx-hash {
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  color: #88ccff;
+  font-weight: 600;
+}
+
+.transaction-row .tx-from,
+.transaction-row .tx-to {
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  color: #ff88cc;
+}
+
+.transaction-row .tx-amount {
+  font-weight: 700;
+  color: #ffcc00;
+  font-size: 14px;
+}
+
+.status-badge {
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  display: inline-block;
+}
+
+.status-badge.status-pending {
+  background: #ff8800;
+  color: #000;
+}
+
+.status-badge.status-finalized {
+  background: #00ff88;
+  color: #000;
+}
+
+.status-badge.status-processing {
+  background: #88ccff;
+  color: #000;
+}
+
+.transaction-row .tx-time {
+  color: #888;
+  font-size: 11px;
+}
+
+@keyframes pulse {
+  0%, 100% { 
+    opacity: 0.6;
+    transform: scale(1);
+  }
+  50% { 
+    opacity: 1;
+    transform: scale(1.1);
+  }
+}
+
+/* Real-time indicator styles */
+.indicator-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  background: #000;
+  border-radius: 50%;
+  margin-right: 6px;
+  animation: pulse 1.5s infinite;
+}
+
+#realtime-indicator {
+  animation: fadeIn 0.5s ease-in;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Protocol Enforcement Styles */
+.protocol-section {
+  background: #1a1a1a;
+  border: 2px solid #00ff88;
+  border-radius: 8px;
+  margin: 20px 0;
+  padding: 20px;
+}
+
+.protocol-section h3 {
+  color: #00ff88;
+  margin: 0 0 15px 0;
+  font-size: 18px;
+  text-align: center;
+}
+
+.protocol-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.protocol-step {
+  background: #0f0f0f;
+  border: 1px solid #333;
+  border-radius: 6px;
+  padding: 12px;
+  border-left: 4px solid #333;
+}
+
+.protocol-step.active {
+  border-left-color: #4CAF50;
+  background: rgba(76, 175, 80, 0.1);
+}
+
+.protocol-step.enforcing {
+  border-left-color: #ff9800;
+  background: rgba(255, 152, 0, 0.1);
+}
+
+.protocol-step.protecting {
+  border-left-color: #f44336;
+  background: rgba(244, 67, 54, 0.1);
+}
+
+.protocol-step.validating {
+  border-left-color: #2196F3;
+  background: rgba(33, 150, 243, 0.1);
+}
+
+.protocol-step.finalized {
+  border-left-color: #00ff88;
+  background: rgba(0, 255, 136, 0.1);
+}
+
+.step-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.step-title {
+  color: #00ff88;
+  font-weight: bold;
+  font-size: 14px;
+}
+
+.step-status {
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: bold;
+}
+
+.status-active { background: #4CAF50; color: #000; }
+.status-enforcing { background: #ff9800; color: #000; }
+.status-protecting { background: #f44336; color: #fff; }
+.status-validating { background: #2196F3; color: #fff; }
+.status-finalized { background: #00ff88; color: #000; }
+.status-idle { background: #666; color: #fff; }
+
+.step-count {
+  background: #333;
+  color: #00ff88;
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: bold;
+}
+
+.step-description {
+  color: #ccc;
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+
+.step-enforcement {
+  color: #00ff88;
+  font-size: 11px;
+  font-weight: bold;
+}
+
+.protocol-health {
+  background: #111;
+  border: 1px solid #333;
+  border-radius: 6px;
+  padding: 12px;
+  margin-top: 15px;
+  text-align: center;
+}
+
+.protocol-health h4 {
+  color: #00ff88;
+  margin: 0 0 8px 0;
+  font-size: 16px;
+}
+
+.protocol-health.enforcing {
+  border-color: #00ff88;
+  background: rgba(0, 255, 136, 0.05);
+}
+
+.protocol-health.monitoring {
+  border-color: #666;
+  background: rgba(102, 102, 102, 0.05);
+}
+
+.health-details {
+  color: #ccc;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.protocol-loading {
+  text-align: center;
+  color: #666;
+  font-style: italic;
+  padding: 20px;
+} 

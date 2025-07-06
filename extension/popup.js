@@ -13,7 +13,7 @@ class XMBLWallet {
   }
 
   async init() {
-    console.log('⚡ XMBL WALLET INIT: Starting real wallet initialization');
+    console.log('⚡ XMBL WALLET INIT: Starting wallet initialization');
     
     // Check for existing wallet
     const stored = await this.loadWallet();
